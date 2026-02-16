@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+dist/
+build/
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+*.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Temp files
+temp_audio/
+*.log

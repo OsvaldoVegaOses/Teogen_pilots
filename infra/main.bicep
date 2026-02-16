@@ -1,0 +1,73 @@
+// infra/main.bicep
+targetScope = 'resourceGroup'
+
+param location string = resourceGroup().location
+param projectName string = 'theogen'
+param adminUsername string = 'theogenadmin'
+@secure()
+param adminPassword string
+
+var uniqueSuffix = uniqueString(resourceGroup().id)
+
+module foundryHub './modules/foundry.bicep' = {
+  name: 'foundryDeploy'
+  params: {
+    location: location
+    hubName: '${projectName}-foundry-${uniqueSuffix}'
+  }
+}
+
+module openAi './modules/openai.bicep' = {
+  name: 'openaiDeploy'
+  params: {
+    location: location
+    accountName: '${projectName}-openai-${uniqueSuffix}'
+  }
+}
+
+module postgresServer './modules/postgres.bicep' = {
+  name: 'postgresDeploy'
+  params: {
+    location: location
+    serverName: '${projectName}-pg-${uniqueSuffix}'
+    administratorLogin: adminUsername
+    administratorLoginPassword: adminPassword
+    databaseName: 'theogen'
+  }
+}
+
+module storageAccount './modules/storage.bicep' = {
+  name: 'storageDeploy'
+  params: {
+    location: location
+    accountName: '${projectName}st${uniqueSuffix}'
+  }
+}
+
+resource redis 'Microsoft.Cache/redis@2024-03-01' = {
+  name: '${projectName}-redis-${uniqueSuffix}'
+  location: location
+  properties: {
+    sku: {
+      name: 'Basic'
+      family: 'C'
+      capacity: 0
+    }
+    enableNonSslPort: false
+    minimumTlsVersion: '1.2'
+    redisVersion: '7.4'
+  }
+}
+
+resource speech 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: '${projectName}-speech-${uniqueSuffix}'
+  location: location
+  kind: 'SpeechServices'
+  sku: {
+    name: 'S0'
+  }
+}
+
+output openaiEndpoint string = openAi.outputs.endpoint
+output postgresHost string = postgresServer.outputs.host
+output storageAccountName string = storageAccount.outputs.name

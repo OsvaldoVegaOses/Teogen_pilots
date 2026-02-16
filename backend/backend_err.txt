@@ -1,0 +1,1006 @@
+Microsoft Foundry / Azure OpenAI credentials not found.
+Azure Storage connection string not found. Local storage enabled.
+INFO:     Started server process [22732]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.IntegrityError: UNIQUE constraint failed: projects.id
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\routing.py", line 302, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\projects.py", line 24, in create_project
+    await db.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1048, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: projects.id
+[SQL: INSERT INTO projects (id, name, description, methodological_profile, language, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('123e4567e89b12d3a456426614174000', 'PAC San Felipe - Actores Comunitarios', 'Análisis de entrevistas a actores comunitarios en San Felipe.', 'straussian', 'es', None, '2026-02-16 05:39:29.617911', '2026-02-16 05:39:29.617911')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.OperationalError: no such table: fragments
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 97, in process_transcription
+    await db_session.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1143, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1844, in _execute_context
+    return self._exec_insertmany_context(dialect, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2126, in _exec_insertmany_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: fragments
+[SQL: INSERT INTO fragments (id, interview_id, text, start_offset, end_offset, speaker_id, embedding_synced, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('97f68ed035d34fffb93896c40f0e2655', '24c7f68c70d842469f14d8c3cfdd6ec3', 'Hola', None, None, 'A', 0, '2026-02-16 05:39:30.664943', 'd757458e8c60435e99d9e17343b30214', '24c7f68c70d842469f14d8c3cfdd6ec3', 'Hola, gracias por invitarme.', None, None, 'B', 0, '2026-02-16 05:39:30.664943')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 76, in app
+    await response(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\responses.py", line 168, in __call__
+    await self.background()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 42, in __call__
+    await task()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 27, in __call__
+    await self.func(*self.args, **self.kwargs)
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 101, in process_transcription
+    logger.error(f"Bkg Transcription Failed for {interview_id}: {e}")
+    ^^^^^^
+NameError: name 'logger' is not defined
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.OperationalError: no such table: fragments
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 97, in process_transcription
+    await db_session.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1143, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1844, in _execute_context
+    return self._exec_insertmany_context(dialect, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2126, in _exec_insertmany_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: fragments
+[SQL: INSERT INTO fragments (id, interview_id, text, start_offset, end_offset, speaker_id, embedding_synced, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('e022a67a1d964b8dbc94bfb88a7b5d79', '88467c2813a04f2ba186ae7f45aa844c', 'Hola', None, None, 'A', 0, '2026-02-16 05:39:31.682689', 'a74f77a1ee7f497792713020258b9eac', '88467c2813a04f2ba186ae7f45aa844c', 'Hola, gracias por invitarme.', None, None, 'B', 0, '2026-02-16 05:39:31.682689')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 76, in app
+    await response(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\responses.py", line 168, in __call__
+    await self.background()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 42, in __call__
+    await task()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 27, in __call__
+    await self.func(*self.args, **self.kwargs)
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 101, in process_transcription
+    logger.error(f"Bkg Transcription Failed for {interview_id}: {e}")
+    ^^^^^^
+NameError: name 'logger' is not defined
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.IntegrityError: UNIQUE constraint failed: projects.id
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\routing.py", line 302, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\projects.py", line 24, in create_project
+    await db.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1048, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: projects.id
+[SQL: INSERT INTO projects (id, name, description, methodological_profile, language, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('123e4567e89b12d3a456426614174000', 'PAC San Felipe - Actores Comunitarios', 'Análisis de entrevistas a actores comunitarios en San Felipe.', 'straussian', 'es', None, '2026-02-16 05:39:32.114206', '2026-02-16 05:39:32.114206')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.OperationalError: no such table: fragments
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 97, in process_transcription
+    await db_session.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1143, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1844, in _execute_context
+    return self._exec_insertmany_context(dialect, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2126, in _exec_insertmany_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: fragments
+[SQL: INSERT INTO fragments (id, interview_id, text, start_offset, end_offset, speaker_id, embedding_synced, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('c906dcf8ea994d5d97a33d7a02db7e6f', '32706ef9b10646d7a0f2cc113b8027c6', 'Hola', None, None, 'A', 0, '2026-02-16 05:39:33.189167', '100be55eb43d4700985f9dbeebca2fd6', '32706ef9b10646d7a0f2cc113b8027c6', 'Hola, gracias por invitarme.', None, None, 'B', 0, '2026-02-16 05:39:33.189167')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 76, in app
+    await response(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\responses.py", line 168, in __call__
+    await self.background()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 42, in __call__
+    await task()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 27, in __call__
+    await self.func(*self.args, **self.kwargs)
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 101, in process_transcription
+    logger.error(f"Bkg Transcription Failed for {interview_id}: {e}")
+    ^^^^^^
+NameError: name 'logger' is not defined
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlite3.OperationalError: no such table: fragments
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 97, in process_transcription
+    await db_session.commit()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1014, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 2032, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1313, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 1288, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4345, in flush
+    self._flush(objects)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4480, in _flush
+    with util.safe_reraise():
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\session.py", line 4441, in _flush
+    flush_context.execute()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1143, in _emit_insert_statements
+    result = connection.execute(
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\sql\elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 1844, in _execute_context
+    return self._exec_insertmany_context(dialect, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2126, in _exec_insertmany_context
+    self._handle_dbapi_exception(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\base.py", line 2118, in _exec_insertmany_context
+    dialect.do_execute(
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\engine\default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 177, in execute
+    self._adapt_connection._handle_exception(error)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 337, in _handle_exception
+    raise error
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 159, in execute
+    self.await_(_cursor.execute(operation, parameters))
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 122, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\aiosqlite\core.py", line 105, in run
+    result = function()
+             ^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: fragments
+[SQL: INSERT INTO fragments (id, interview_id, text, start_offset, end_offset, speaker_id, embedding_synced, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: ('053d48c3f02047dfb7005eb6969030e4', '5f98512e7ca74fe3a1a31be34c1b1dc0', 'Hola', None, None, 'A', 0, '2026-02-16 05:39:34.079907', 'ce3a92ea96324131a8a6460e6f74856a', '5f98512e7ca74fe3a1a31be34c1b1dc0', 'Hola, gracias por invitarme.', None, None, 'B', 0, '2026-02-16 05:39:34.079907')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 409, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\routing.py", line 76, in app
+    await response(scope, receive, send)
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\responses.py", line 168, in __call__
+    await self.background()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 42, in __call__
+    await task()
+  File "C:\Users\osval\anaconda3\envs\myproject\Lib\site-packages\starlette\background.py", line 27, in __call__
+    await self.func(*self.args, **self.kwargs)
+  File "C:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\backend\app\api\interviews.py", line 101, in process_transcription
+    logger.error(f"Bkg Transcription Failed for {interview_id}: {e}")
+    ^^^^^^
+NameError: name 'logger' is not defined
