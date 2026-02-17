@@ -10,7 +10,16 @@ app = FastAPI(
 )
 
 # CORS context
-origins = [settings.FRONTEND_URL] if settings.FRONTEND_URL else ["*"]
+# Define allowed origins specifically, avoiding "*" in production if possible
+origins = [
+    settings.FRONTEND_URL,
+    "http://localhost:3000",
+    "https://theogenfrontwpdxe2pv.z13.web.core.windows.net",
+    "https://theogen-app.whitepebble-c2a4715b.eastus.azurecontainerapps.io"
+]
+# Clean up empty strings or duplicates
+origins = list(set([o for o in origins if o]))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -21,14 +30,14 @@ app.add_middleware(
 
 # Include routers
 app.include_router(projects.router, prefix="/api")
-app.include_router(theory.router, prefix="/api")
 app.include_router(interviews.router, prefix="/api")
 app.include_router(codes.router, prefix="/api")
 app.include_router(memos.router, prefix="/api")
+app.include_router(theory.router, prefix="/api")
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to TheoGen API"}
+    return {"message": "Welcome to TheoGen API", "auth": "enabled"}
 
 @app.get("/health")
 async def health_check():

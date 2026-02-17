@@ -12,6 +12,8 @@ from ..schemas.interview import InterviewResponse, InterviewCreate
 from ..models.models import Interview, Project
 from ..services.storage_service import storage_service
 from ..services.transcription_service import transcription_service
+from ..core.auth import CurrentUser, get_current_user
+from .dependencies import verify_project_ownership
 from sqlalchemy import select
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -22,6 +24,7 @@ async def upload_interview(
     background_tasks: BackgroundTasks,
     participant_pseudonym: Optional[str] = None,
     file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -29,8 +32,13 @@ async def upload_interview(
     2. Creates a record in the database
     3. Triggers background transcription
     """
-    # Verify project
-    project_result = await db.execute(select(Project).filter(Project.id == project_id))
+    # Verify project exists AND belongs to the authenticated user
+    project_result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.owner_id == user.user_uuid,
+        )
+    )
     if not project_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -90,9 +98,9 @@ async def process_transcription(interview_id: UUID, blob_name: str):
             if interview:
                 interview.full_text = result["full_text"]
                 interview.transcription_status = "completed"
-                interview.transcription_method = result["method"]  # ← Now exists in ORM
+                interview.transcription_method = result["method"]
                 interview.word_count = len(result["full_text"].split())
-                interview.speakers = result.get("segments", [])  # ← Now exists in ORM
+                interview.speakers = result.get("segments", [])
 
                 # Create Fragments from segments
                 from ..models.models import Fragment
@@ -122,6 +130,20 @@ async def process_transcription(interview_id: UUID, blob_name: str):
                 logger.error(f"Failed to mark interview as failed: {db_err}")
 
 @router.get("/{project_id}", response_model=List[InterviewResponse])
-async def list_interviews(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_interviews(
+    project_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify ownership before listing
+    project_result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.owner_id == user.user_uuid,
+        )
+    )
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
     result = await db.execute(select(Interview).filter(Interview.project_id == project_id))
     return result.scalars().all()

@@ -1,28 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from uuid import UUID
+from sqlalchemy import select
 
 from ..database import get_db
 from ..schemas.theory import TheoryGenerateRequest, TheoryResponse
 from ..engines.theory_engine import theory_engine
 from ..models.models import Project, Theory, Code, Category
-from sqlalchemy import select
+from ..core.auth import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/projects", tags=["Theory"])
 
 @router.post("/{project_id}/generate-theory", response_model=TheoryResponse)
 async def generate_theory(
-    project_id: UUID,
+    project_id: UUID, 
     request: TheoryGenerateRequest,
-    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Triggers the Grounded Theory generation pipeline.
     Uses multiple Microsoft Foundry models via direct deployment.
     """
-    # 1. Verify project exists
-    project_result = await db.execute(select(Project).filter(Project.id == project_id))
+    # 1. Verify project exists and belongs to authenticated user
+    project_result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.owner_id == user.user_uuid
+        )
+    )
     project = project_result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -30,9 +37,6 @@ async def generate_theory(
     # 2. Collect Data
     cat_result = await db.execute(select(Category).filter(Category.project_id == project_id))
     categories = cat_result.scalars().all()
-
-    code_result = await db.execute(select(Code).filter(Code.project_id == project_id))
-    codes = code_result.scalars().all()
 
     if len(categories) < 2:
         raise HTTPException(
@@ -42,7 +46,6 @@ async def generate_theory(
 
     # 3. Logic: Central Category -> Paradigm -> Gaps
     try:
-        # ← FIXED: c.description → c.definition (ORM Category uses 'definition')
         cats_data = [
             {"id": str(c.id), "name": c.name, "description": c.definition or ""}
             for c in categories
@@ -63,8 +66,6 @@ async def generate_theory(
         gaps = await theory_engine.analyze_saturation_and_gaps(paradigm)
 
         # 4. Save to Database
-        # ← FIXED: model=paradigm → model_json=paradigm (ORM column name)
-        # ← FIXED: generated_by now exists in ORM
         new_theory = Theory(
             project_id=project_id,
             model_json=paradigm,
@@ -87,6 +88,20 @@ async def generate_theory(
         raise HTTPException(status_code=500, detail=f"Theory generation failed: {str(e)}")
 
 @router.get("/{project_id}/theories", response_model=List[TheoryResponse])
-async def list_theories(project_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_theories(
+    project_id: UUID, 
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verify project ownership
+    project_result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.owner_id == user.user_uuid
+        )
+    )
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
     result = await db.execute(select(Theory).filter(Theory.project_id == project_id))
     return result.scalars().all()

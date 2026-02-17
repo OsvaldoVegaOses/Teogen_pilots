@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiClient } from "@/lib/api";
 
 interface Code {
     id: string;
@@ -16,11 +17,15 @@ export default function CodeExplorer({ projectId }: { projectId: string }) {
     useEffect(() => {
         const fetchCodes = async () => {
             try {
-                const res = await fetch(`http://localhost:8000/api/codes/project/${projectId}`);
+                const res = await apiClient(`codes/project/${projectId}`);
                 if (res.ok) setCodes(await res.json());
-            } catch (e) { console.error(e); }
+                else console.error("Failed to fetch codes:", res.status);
+            } catch (e) {
+                console.error("Error fetching codes:", e);
+            }
         };
-        fetchCodes();
+
+        if (projectId) fetchCodes();
     }, [projectId]);
 
     return (
