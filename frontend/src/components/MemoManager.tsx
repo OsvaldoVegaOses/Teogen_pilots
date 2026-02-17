@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { apiClient } from "@/lib/api";
 
 interface Memo {
     id: string;
@@ -17,23 +18,22 @@ export default function MemoManager({ projectId }: { projectId: string }) {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        fetchMemos();
+        if (projectId) fetchMemos();
     }, [projectId]);
 
     const fetchMemos = async () => {
         try {
-            const res = await fetch(`http://localhost:8000/api/memos/project/${projectId}`);
+            const res = await apiClient(`memos/project/${projectId}`);
             if (res.ok) setMemos(await res.json());
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error fetching memos:", e); }
     };
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:8000/api/memos/`, {
+            const res = await apiClient("memos", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     title: newTitle,
                     content: newContent,
@@ -45,7 +45,7 @@ export default function MemoManager({ projectId }: { projectId: string }) {
                 setNewContent("");
                 fetchMemos();
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error creating memo:", e); }
         finally { setLoading(false); }
     };
 

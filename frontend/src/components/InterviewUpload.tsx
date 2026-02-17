@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiClient } from "@/lib/api";
 
 export default function InterviewUpload({ projectId, onUploadSuccess }: { projectId: string, onUploadSuccess: () => void }) {
     const [file, setFile] = useState<File | null>(null);
@@ -20,7 +21,8 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
         if (pseudonym) formData.append("participant_pseudonym", pseudonym);
 
         try {
-            const response = await fetch(`http://localhost:8000/api/interviews/upload?project_id=${projectId}`, {
+            // Note: apiClient automatically skips setting Content-Type for FormData
+            const response = await apiClient(`interviews/upload?project_id=${projectId}`, {
                 method: "POST",
                 body: formData,
             });
@@ -29,12 +31,13 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                 setMessage("✅ Entrevista subida y procesando...");
                 setFile(null);
                 setPseudonym("");
-                onUploadSuccess();
+                if (onUploadSuccess) onUploadSuccess();
             } else {
                 const err = await response.json();
                 setMessage(`❌ Error: ${err.detail || "Error desconocido"}`);
             }
         } catch (error) {
+            console.error("Upload failed", error);
             setMessage("❌ Error de conexión con el servidor.");
         } finally {
             setUploading(false);
