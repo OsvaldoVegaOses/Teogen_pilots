@@ -37,7 +37,7 @@ export default function Home() {
               De datos a teoría en <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">días, no meses</span>.
             </h1>
             <p className="mx-auto mt-8 max-w-2xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-              Con el rigor de Glaser & Strauss y la potencia de la Inteligencia Artificial. TheoGen automatiza el descubrimiento de patrones para investigadores de Teoría Fundamentada.
+              Con el rigor de Expertos y la potencia de la Inteligencia Artificial. TheoGen automatiza el descubrimiento de patrones para investigadores de Teoría Fundamentada.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link 
@@ -53,12 +53,23 @@ export default function Home() {
                 Ver Demo
               </Link>
             </div>
-            <div className="mt-16 flex items-center justify-center gap-10 grayscale opacity-50 dark:invert">
-              {/* Placeholders for academic partner logos */}
-              <span className="text-xl font-bold italic">OXFORD</span>
-              <span className="text-xl font-bold italic">STANFORD</span>
-              <span className="text-xl font-bold italic">MIT</span>
-              <span className="text-xl font-bold italic">HARVARD</span>
+            <div className="mt-16 flex items-center justify-center gap-10 text-indigo-600">
+              <div className="flex flex-col items-center">
+                <div className="text-2xl mb-2">🤖</div>
+                <span className="text-sm font-medium">Azure AI</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="text-2xl mb-2">⚡</div>
+                <span className="text-sm font-medium">FastAPI</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="text-2xl mb-2">🗄️</div>
+                <span className="text-sm font-medium">PostgreSQL</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="text-2xl mb-2">🔄</div>
+                <span className="text-sm font-medium">Redis</span>
+              </div>
             </div>
           </div>
         </section>

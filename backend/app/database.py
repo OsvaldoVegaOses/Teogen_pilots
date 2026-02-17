@@ -2,20 +2,20 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from .core.settings import settings
 
-# Construct the database URL from settings
-# For local dev, a simple sqlite or local pg can be used if vars are empty
+# PostgreSQL only — no SQLite fallback
+# The ORM uses Postgres-specific types (UUID, ARRAY, JSON) that are incompatible with SQLite.
 if not settings.AZURE_PG_HOST:
-    # Use absolute path for consistency
-    import os
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(base_dir, "test.db")
-    DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
-else:
-    DATABASE_URL = (
-        f"postgresql+asyncpg://{settings.AZURE_PG_USER}:{settings.AZURE_PG_PASSWORD}"
-        f"@{settings.AZURE_PG_HOST}:5432/{settings.AZURE_PG_DATABASE}"
-        f"?ssl=require"
+    raise RuntimeError(
+        "AZURE_PG_HOST is not set. "
+        "TheoGen requires PostgreSQL — SQLite is not supported. "
+        "Set AZURE_PG_HOST, AZURE_PG_USER, AZURE_PG_PASSWORD in your .env file."
     )
+
+DATABASE_URL = (
+    f"postgresql+asyncpg://{settings.AZURE_PG_USER}:{settings.AZURE_PG_PASSWORD}"
+    f"@{settings.AZURE_PG_HOST}:5432/{settings.AZURE_PG_DATABASE}"
+    f"?ssl=require"
+)
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -27,8 +27,8 @@ engine = create_async_engine(
 )
 
 AsyncSessionLocal = sessionmaker(
-    engine, 
-    class_=AsyncSession, 
+    engine,
+    class_=AsyncSession,
     expire_on_commit=False,
     autocommit=False,
     autoflush=False,

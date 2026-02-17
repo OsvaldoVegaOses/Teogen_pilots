@@ -1,12 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMsal } from "@azure/msal-react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import InterviewUpload from "@/components/InterviewUpload";
 import MemoManager from "@/components/MemoManager";
 import CodeExplorer from "@/components/CodeExplorer";
 
 export default function Dashboard() {
+    const { instance, accounts } = useMsal();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (accounts.length === 0) {
+            router.push("/login");
+        }
+    }, [accounts, router]);
+
     const [projects] = useState([
         { id: "123e4567-e89b-12d3-a456-426614174000", name: "Impacto del Cambio Climático", interviews: 12, status: "Teorización", progress: 85 },
         { id: "2", name: "Organización Comunitaria", interviews: 8, status: "Codificación", progress: 45 },

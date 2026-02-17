@@ -22,10 +22,10 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview'
     }
     backup: {
       backupRetentionDays: 7
-      geoRedundantBackup: 'Disabled'
+      geoRedundantBackup: 'Enabled'
     }
     network: {
-      publicNetworkAccess: 'Enabled'
+      publicNetworkAccess: 'Disabled'
     }
   }
 }

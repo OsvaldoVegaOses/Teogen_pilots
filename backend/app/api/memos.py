@@ -13,6 +13,7 @@ router = APIRouter(prefix="/memos", tags=["Memos"])
 
 @router.post("/", response_model=MemoResponse)
 async def create_memo(memo: MemoCreate, db: AsyncSession = Depends(get_db)):
+    # ← FIXED: Now works because ORM Memo has interview_id, code_id, updated_at
     db_memo = Memo(**memo.model_dump())
     db.add(db_memo)
     await db.commit()
@@ -30,11 +31,11 @@ async def update_memo(memo_id: UUID, memo_update: MemoUpdate, db: AsyncSession =
     db_memo = result.scalar_one_or_none()
     if not db_memo:
         raise HTTPException(status_code=404, detail="Memo not found")
-    
+
     for var, value in memo_update.model_dump(exclude_unset=True).items():
         setattr(db_memo, var, value)
-    
-    db_memo.updated_at = datetime.utcnow()
+
+    # updated_at will be set automatically by onupdate=datetime.utcnow in ORM
     await db.commit()
     await db.refresh(db_memo)
     return db_memo

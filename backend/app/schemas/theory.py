@@ -14,13 +14,13 @@ class TheoryGenerateRequest(BaseModel):
 
 class TheoryResponse(TheoryBase):
     id: UUID
-    central_category_id: Optional[UUID]
-    model: Dict[str, Any]
+    central_category_id: Optional[UUID] = None
+    model_json: Dict[str, Any]  # ← FIXED: was "model", ORM column is "model_json"
     propositions: List[Dict[str, Any]] = []
     validation: Dict[str, Any] = {}
     gaps: List[Dict[str, Any]] = []
-    confidence_score: float
-    generated_by: str
+    confidence_score: Optional[float] = None
+    generated_by: Optional[str] = None  # ← FIXED: now Optional (may be null)
     created_at: datetime
 
     class Config:
