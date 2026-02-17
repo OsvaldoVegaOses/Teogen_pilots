@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
@@ -22,7 +22,7 @@ class MemoUpdate(BaseModel):
 class MemoResponse(MemoBase):
     id: UUID
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None  # ← FIXED: Optional because first insert may be null
 
     class Config:
         from_attributes = True

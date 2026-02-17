@@ -25,4 +25,3 @@ hdbscan
 networkx
 pandas
 numpy
-aiosqlite

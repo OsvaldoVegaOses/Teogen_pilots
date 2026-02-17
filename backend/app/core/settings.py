@@ -4,23 +4,26 @@ from typing import Optional
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TheoGen"
     
-    # Microsoft Foundry / Azure OpenAI API v1
-    AZURE_OPENAI_API_KEY: str = ""
-    AZURE_OPENAI_ENDPOINT: str = ""
-    # New in 2025: api_version is less critical with /v1/ endpoint but still used in AzureOpenAI client
-    AZURE_OPENAI_API_VERSION: str = "2024-10-21" 
+    # Frontend URL
+    FRONTEND_URL: str = ""
     
-    # Model Deployments (Excat names from your Foundry Portal)
-    MODEL_REASONING_ADVANCED: str = "gpt-5.2-chat"
-    MODEL_REASONING_FAST: str = "o3-mini" # Maintain for future or swap if needed
-    MODEL_REASONING_EFFICIENT: str = "o4-mini"
-    MODEL_CHAT: str = "gpt-4o"
+    # Microsoft Foundry / Azure OpenAI API v1
+    AZURE_OPENAI_API_KEY: str = ""  # Tu clave de acceso
+    AZURE_OPENAI_ENDPOINT: str = "https://axial-resource.cognitiveservices.azure.com/"  # Tu endpoint
+    # New in 2025: api_version is less critical with /v1/ endpoint but still used in AzureOpenAI client
+    AZURE_OPENAI_API_VERSION: str = "2024-05-01-preview" 
+    
+    # Model Deployments (Exact names from your Foundry Portal)
+    MODEL_REASONING_ADVANCED: str = "DeepSeek-V3.2-Speciale"
+    MODEL_REASONING_FAST: str = "DeepSeek-V3.2-Speciale"  # Was model-router; changed to avoid Claude thinking.signature error
+    MODEL_REASONING_EFFICIENT: str = "DeepSeek-V3.2-Speciale"  # Was model-router; same fix
+    MODEL_CHAT: str = ""
     MODEL_EMBEDDING: str = "text-embedding-3-large"
     MODEL_TRANSCRIPTION: str = "gpt-4o-transcribe-diarize"
-    MODEL_CLAUDE_ADVANCED: str = "claude-3-5-sonnet-20241022"
+    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"  # Fallback for claude_analysis(); avoids Claude thinking.signature issue
     MODEL_ROUTER: str = "model-router"
     
-    # Advanced Options (Kimi and DeepSeek identified in your portal)
+    # Advanced Options (Models identified in your portal)
     MODEL_KIMI: str = "Kimi-K2.5"
     MODEL_DEEPSEEK: str = "DeepSeek-V3.2-Speciale"
     

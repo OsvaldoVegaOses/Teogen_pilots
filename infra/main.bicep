@@ -44,14 +44,28 @@ module storageAccount './modules/storage.bicep' = {
   }
 }
 
+module entraApp './modules/entra.bicep' = {
+  name: 'entraDeploy'
+}
+
+// Módulo para el frontend de TheoGen
+module frontend './modules/frontend.bicep' = {
+  name: 'frontendDeploy'
+  params: {
+    projectName: projectName
+    location: location
+    environment: 'prod'
+  }
+}
+
 resource redis 'Microsoft.Cache/redis@2024-03-01' = {
   name: '${projectName}-redis-${uniqueSuffix}'
   location: location
   properties: {
     sku: {
-      name: 'Basic'
+      name: 'Standard'
       family: 'C'
-      capacity: 0
+      capacity: 2
     }
     enableNonSslPort: false
     minimumTlsVersion: '1.2'
@@ -71,3 +85,6 @@ resource speech 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
 output openaiEndpoint string = openAi.outputs.endpoint
 output postgresHost string = postgresServer.outputs.host
 output storageAccountName string = storageAccount.outputs.name
+output clientId string = entraApp.outputs.clientId
+output tenantId string = entraApp.outputs.tenantId
+output frontendUrl string = frontend.outputs.frontendUrl

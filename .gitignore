@@ -21,3 +21,4 @@ env/
 # Temp files
 temp_audio/
 *.log
+verificar_recursos*.py

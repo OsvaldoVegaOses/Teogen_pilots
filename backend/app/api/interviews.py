@@ -22,7 +22,7 @@ async def upload_interview(
     background_tasks: BackgroundTasks,
     participant_pseudonym: Optional[str] = None,
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     1. Uploads audio/file to Azure Blob Storage
@@ -35,10 +35,10 @@ async def upload_interview(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Upload to Azure
-    file_ext = file.filename.split(".")[-1]
+    file_ext = file.filename.split(".")[-1] if file.filename else "wav"
     blob_name = f"{project_id}/{uuid.uuid4()}.{file_ext}"
     file_content = await file.read()
-    
+
     try:
         blob_url = await storage_service.upload_blob("audio", blob_name, file_content)
     except Exception as e:
@@ -51,66 +51,75 @@ async def upload_interview(
         audio_blob_url=blob_url,
         transcription_status="processing",
     )
-    
+
     db.add(new_interview)
     await db.commit()
     await db.refresh(new_interview)
 
     # Trigger Background Transcription
+    # Pass blob_name (not the full URL) for correct SAS URL generation
     background_tasks.add_task(
-        process_transcription, 
-        new_interview.id, 
-        blob_url
+        process_transcription,
+        new_interview.id,
+        blob_name,  # ← FIXED: pass the blob path, not the full URL
     )
 
     return new_interview
 
-async def process_transcription(interview_id: UUID, blob_url: str):
+async def process_transcription(interview_id: UUID, blob_name: str):
     """Background task for transcription using axial-speech with gpt-4o fallback."""
     from ..database import AsyncSessionLocal
-    
+
     async with AsyncSessionLocal() as db_session:
         try:
-            print(f"DEBUG: Starting transcription for {interview_id}")
-            # Generate a SAS URL for the transcription service to access the blob
-            sas_url = await storage_service.generate_sas_url("audio", blob_url.split("/")[-1])
-            print(f"DEBUG: SAS URL generated: {sas_url}")
-            
+            logger.info(f"Starting transcription for interview {interview_id}")
+
+            # Generate a SAS URL using the correct blob path (project_id/uuid.ext)
+            sas_url = await storage_service.generate_sas_url("audio", blob_name)
+            logger.info(f"SAS URL generated for blob: {blob_name}")
+
             result = await transcription_service.transcribe_interview(sas_url)
-            print(f"DEBUG: Transcription result received: {result['method']}")
-            
+            logger.info(f"Transcription result received: {result['method']}")
+
             # Update Database
-            interview_result = await db_session.execute(select(Interview).filter(Interview.id == interview_id))
+            interview_result = await db_session.execute(
+                select(Interview).filter(Interview.id == interview_id)
+            )
             interview = interview_result.scalar_one_or_none()
-            
+
             if interview:
                 interview.full_text = result["full_text"]
                 interview.transcription_status = "completed"
-                interview.transcription_method = result["method"]
+                interview.transcription_method = result["method"]  # ← Now exists in ORM
                 interview.word_count = len(result["full_text"].split())
-                interview.speakers = result.get("segments", [])
-                
+                interview.speakers = result.get("segments", [])  # ← Now exists in ORM
+
                 # Create Fragments from segments
                 from ..models.models import Fragment
                 for segment in result.get("segments", []):
                     new_fragment = Fragment(
                         interview_id=interview_id,
                         text=segment.get("text", ""),
-                        speaker_id=str(segment.get("speaker", "Unknown"))
+                        speaker_id=str(segment.get("speaker", "Unknown")),
                     )
                     db_session.add(new_fragment)
 
                 await db_session.commit()
                 logger.info(f"Transcription and fragmentation completed for interview {interview_id}")
-                
+
         except Exception as e:
-            logger.error(f"Bkg Transcription Failed for {interview_id}: {e}")
+            logger.error(f"Background transcription failed for {interview_id}: {e}")
             # Mark as failed in DB
-            interview_result = await db_session.execute(select(Interview).filter(Interview.id == interview_id))
-            interview = interview_result.scalar_one_or_none()
-            if interview:
-                interview.transcription_status = "failed"
-                await db_session.commit()
+            try:
+                interview_result = await db_session.execute(
+                    select(Interview).filter(Interview.id == interview_id)
+                )
+                interview = interview_result.scalar_one_or_none()
+                if interview:
+                    interview.transcription_status = "failed"
+                    await db_session.commit()
+            except Exception as db_err:
+                logger.error(f"Failed to mark interview as failed: {db_err}")
 
 @router.get("/{project_id}", response_model=List[InterviewResponse])
 async def list_interviews(project_id: UUID, db: AsyncSession = Depends(get_db)):
