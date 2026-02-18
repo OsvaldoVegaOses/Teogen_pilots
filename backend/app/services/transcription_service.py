@@ -1,14 +1,21 @@
+
 import httpx
+import logging
+import base64
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from ..core.settings import settings
 from .azure_openai import foundry_openai
-import logging
 
 logger = logging.getLogger(__name__)
 
 class FoundryTranscriptionService:
-    """Transcription using Foundry Tools 2025 (Fast Transcription + Diarization).
+    """Transcription using Foundry Tools 2025 (Primary: Azure Speech, Fallback: GPT-4o Audio).
     
-    No mock/local fallback — requires Azure Speech credentials.
+    Robustness Features:
+    - Retries with exponential backoff for network errors (via 'tenacity')
+    - Automatic fallback to GPT-4o if Azure Speech fails completely
+    - Atomic status handling (managed by caller/background task logic)
     """
 
     def __init__(self):
@@ -16,73 +23,139 @@ class FoundryTranscriptionService:
         self.region = settings.AZURE_SPEECH_REGION
 
         if not self.speech_key:
-            raise RuntimeError(
-                "AZURE_SPEECH_KEY is required. "
-                "TheoGen does not support mock transcription."
-            )
+            # Not raising error here allows fallback-only mode if configured
+            logger.warning("AZURE_SPEECH_KEY not set. Primary transcription (axial-speech) will fail.")
 
     async def transcribe_interview(self, audio_blob_url: str, language: str = "es-CL") -> dict:
         """
-        Transcription pipeline: try axial-speech first, then gpt-4o-transcribe-diarize.
+        Main pipeline:
+        1. Try Azure Speech (Primary)
+        2. On failure, Try GPT-4o Audio (Fallback)
         """
         try:
-            logger.info(f"Attempting primary transcription with axial-speech for {audio_blob_url}")
+            logger.info(f"Attempting primary transcription (Azure Speech) for {audio_blob_url}")
             return await self.transcribe_fast(audio_blob_url, language)
         except Exception as e:
-            logger.warning(f"Primary transcription (axial-speech) failed: {e}. Falling back to GPT-4o.")
+            logger.warning(f"Primary transcription failed: {e}. Falling back to GPT-4o.")
             try:
-                return await self.transcribe_diarize(audio_blob_url)
+                return await self.transcribe_gpt4o_audio(audio_blob_url, language)
             except Exception as fe:
-                logger.error(f"Fallback transcription also failed: {fe}")
-                raise RuntimeError("All transcription methods failed") from fe
+                logger.error(f"Fallback transcription (GPT-4o) also failed: {fe}")
+                raise RuntimeError("All transcription methods failed.") from fe
 
+    @retry(
+        retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True
+    )
     async def transcribe_fast(self, audio_blob_url: str, language: str = "es-CL") -> dict:
-        """Fast Transcription API 2025 — pre-recorded interviews (axial-speech)."""
+        """
+        Primary Method: Azure AI Speech (Fast Transcription API).
+        Supports direct URL ingestion (no download needed).
+        """
+        # API Endpoint for 2024-05-15-preview (Batch Transcription)
         endpoint = (
             f"https://{self.region}.api.cognitive.microsoft.com"
-            f"/speechtotext/transcriptions:transcribe?api-version=2025-10-15"
+            f"/speechtotext/transcriptions:transcribe?api-version=2024-05-15-preview" 
         )
 
         headers = {
             "Ocp-Apim-Subscription-Key": self.speech_key,
             "Content-Type": "application/json",
+            "Accept": "application/json"
         }
 
         payload = {
             "contentUrls": [audio_blob_url],
             "locale": language,
-            "diarizationEnabled": True,
-            "wordLevelTimestampsEnabled": True,
+            "displayName": "TheoGen Transcription",
+            "model": None, # Use default model
+            "properties": {
+                "diarizationEnabled": True,
+                "wordLevelTimestampsEnabled": True,
+                "punctuationMode": "DictatedAndAutomatic",
+                "profanityFilterMode": "Masked"
+            }
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(endpoint, json=payload, headers=headers)
-            if response.status_code != 200:
-                logger.error(f"axial-speech API error: {response.text}")
-                raise RuntimeError(f"axial-speech failed with status {response.status_code}")
-
+            response.raise_for_status()
             result = response.json()
+            
+            # Extract combined text
+            combined = result.get("combinedPhrases", [{}])[0].get("text", "")
+            
+            return {
+                "full_text": combined,
+                "segments": result.get("phrases", []),
+                "language": language,
+                "method": "axial-speech",
+                "status": "completed",
+            }
+
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=2, min=4, max=10),
+        reraise=True
+    )
+    async def transcribe_gpt4o_audio(self, audio_blob_url: str, language: str) -> dict:
+        """
+        Fallback Method: GPT-4o Audio Model (via Chat Completions with Audio).
+        Deployment: gpt-4o-transcribe-diarize
+        """
+        # Use the Azure-specific client for deployments
+        client = foundry_openai.azure_client 
+        if not client:
+             raise RuntimeError("Foundry Azure OpenAI client not initialized")
+
+        logger.info(f"Executing fallback transcription with {settings.MODEL_TRANSCRIPTION}")
+
+        # 1. Download Audio form Blob Storage
+        async with httpx.AsyncClient() as http_client:
+            audio_response = await http_client.get(audio_blob_url)
+            audio_response.raise_for_status()
+            audio_content = audio_response.content
+            
+        b64_audio = base64.b64encode(audio_content).decode('utf-8')
+
+        # 2. Call Azure OpenAI (GPT-4o Audio)
+        # Note: This schema assumes support for multimodal input_audio.
+        # Ensure your API version supports this (e.g. 2024-10-01-preview)
+        response = await client.chat.completions.create(
+            model=settings.MODEL_TRANSCRIPTION, # "gpt-4o-transcribe-diarize"
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert transcriber. Transcribe the user's audio verbatim."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Transcribe this interview audio."},
+                        {
+                            "type": "input_audio", 
+                            "input_audio": {
+                                "data": b64_audio,
+                                "format": "wav" 
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.0
+        )
+
+        transcript_text = response.choices[0].message.content
 
         return {
-            "full_text": result["combinedPhrases"][0]["display"],
-            "segments": result["phrases"],
+            "full_text": transcript_text or "",
+            "segments": [], 
             "language": language,
-            "method": "axial-speech",
-            "status": "completed",
+            "method": "gpt-4o-fallback",
+            "status": "completed"
         }
-
-    async def transcribe_diarize(self, audio_blob_url: str) -> dict:
-        """Fallback: gpt-4o-transcribe-diarize for high-fidelity qualitative analysis."""
-        if not foundry_openai.client:
-            raise RuntimeError("Foundry AI client not initialized for fallback transcription")
-
-        logger.info(f"Executing fallback diarization with {settings.MODEL_TRANSCRIPTION}")
-
-        # TODO: Implement real gpt-4o-transcribe-diarize API call
-        # This requires downloading the audio and sending it via the OpenAI audio API.
-        raise NotImplementedError(
-            "gpt-4o-transcribe-diarize fallback is not yet implemented. "
-            "Ensure axial-speech is properly configured."
-        )
 
 transcription_service = FoundryTranscriptionService()

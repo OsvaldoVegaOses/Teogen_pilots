@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
@@ -18,6 +18,20 @@ from sqlalchemy import select
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
+# Security Constraints
+MAX_FILE_SIZE_MB = 250
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+ALLOWED_MIME_TYPES = {
+    # Audio
+    "audio/mpeg", "audio/wav", "audio/x-m4a", "audio/mp4", "audio/webm", "audio/ogg", "audio/aac", "audio/x-wav",
+    # Video
+    "video/mp4", "video/mpeg", "video/webm", "video/quicktime",
+    # Documents (Transcripts)
+    "text/plain", "application/json", 
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"  # .docx
+}
+
 @router.post("/upload", response_model=InterviewResponse)
 async def upload_interview(
     project_id: UUID,
@@ -31,8 +45,14 @@ async def upload_interview(
     1. Uploads audio/file to Azure Blob Storage
     2. Creates a record in the database
     3. Triggers background transcription
+    
+    Security:
+    - Validates file type (Audio/Video/Doc)
+    - Enforces max file size (250MB)
+    - Verifies project ownership
     """
-    # Verify project exists AND belongs to the authenticated user
+    
+    # 1. Security: Validate Project Ownership
     project_result = await db.execute(
         select(Project).where(
             Project.id == project_id,
@@ -42,17 +62,45 @@ async def upload_interview(
     if not project_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Upload to Azure
+    # 2. Security: Validate File Type
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type: {file.content_type}. Allowed types: Audio, Video, .docx, .txt, .json"
+        )
+
+    # 3. Security: Validate File Size
+    # Check Content-Length header first (fast but spoofable)
+    content_length = file.headers.get("content-length")
+    if content_length and int(content_length) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Max size is {MAX_FILE_SIZE_MB}MB"
+        )
+
+    # Read file content to memory (for now, simple implementation)
+    # WARNING: Ideally we should stream this to Azure, but for 250MB strictly validated it's acceptable for this stage.
+    # To improve, we would use a specialized streaming uploader.
+    file_content = await file.read()
+    
+    # Check actual size after reading
+    if len(file_content) > MAX_FILE_SIZE_BYTES:
+         raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Max size is {MAX_FILE_SIZE_MB}MB"
+        )
+
+    # 4. Upload to Azure
     file_ext = file.filename.split(".")[-1] if file.filename else "wav"
     blob_name = f"{project_id}/{uuid.uuid4()}.{file_ext}"
-    file_content = await file.read()
 
     try:
         blob_url = await storage_service.upload_blob("audio", blob_name, file_content)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
+        logger.error(f"Storage upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Storage upload failed")
 
-    # Save to Database
+    # 5. Save to Database
     new_interview = Interview(
         project_id=project_id,
         participant_pseudonym=participant_pseudonym,
@@ -64,12 +112,11 @@ async def upload_interview(
     await db.commit()
     await db.refresh(new_interview)
 
-    # Trigger Background Transcription
-    # Pass blob_name (not the full URL) for correct SAS URL generation
+    # 6. Trigger Background Transcription
     background_tasks.add_task(
         process_transcription,
         new_interview.id,
-        blob_name,  # ← FIXED: pass the blob path, not the full URL
+        blob_name,
     )
 
     return new_interview
@@ -82,10 +129,8 @@ async def process_transcription(interview_id: UUID, blob_name: str):
         try:
             logger.info(f"Starting transcription for interview {interview_id}")
 
-            # Generate a SAS URL using the correct blob path (project_id/uuid.ext)
             sas_url = await storage_service.generate_sas_url("audio", blob_name)
-            logger.info(f"SAS URL generated for blob: {blob_name}")
-
+            
             result = await transcription_service.transcribe_interview(sas_url)
             logger.info(f"Transcription result received: {result['method']}")
 
@@ -113,11 +158,9 @@ async def process_transcription(interview_id: UUID, blob_name: str):
                     db_session.add(new_fragment)
 
                 await db_session.commit()
-                logger.info(f"Transcription and fragmentation completed for interview {interview_id}")
 
         except Exception as e:
             logger.error(f"Background transcription failed for {interview_id}: {e}")
-            # Mark as failed in DB
             try:
                 interview_result = await db_session.execute(
                     select(Interview).filter(Interview.id == interview_id)
