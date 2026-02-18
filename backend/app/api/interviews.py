@@ -78,24 +78,16 @@ async def upload_interview(
             detail=f"File too large. Max size is {MAX_FILE_SIZE_MB}MB"
         )
 
-    # Read file content to memory (for now, simple implementation)
-    # WARNING: Ideally we should stream this to Azure, but for 250MB strictly validated it's acceptable for this stage.
-    # To improve, we would use a specialized streaming uploader.
-    file_content = await file.read()
-    
-    # Check actual size after reading
-    if len(file_content) > MAX_FILE_SIZE_BYTES:
-         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Max size is {MAX_FILE_SIZE_MB}MB"
-        )
-
-    # 4. Upload to Azure
+    # Stream upload to Azure without loading entirely into memory
+    # Security: Content-Length check above prevents initiating transfer for declared large files.
+    # UploadFile spools to disk if large, so we pass the file-like object directly.
     file_ext = file.filename.split(".")[-1] if file.filename else "wav"
     blob_name = f"{project_id}/{uuid.uuid4()}.{file_ext}"
 
     try:
-        blob_url = await storage_service.upload_blob("audio", blob_name, file_content)
+        # Pass the file-like object directly for streaming upload
+        # Note: file.file is a SpooledTemporaryFile or similar file-like object
+        blob_url = await storage_service.upload_blob("audio", blob_name, file.file)
     except Exception as e:
         logger.error(f"Storage upload failed: {e}")
         raise HTTPException(status_code=500, detail="Storage upload failed")

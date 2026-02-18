@@ -3,6 +3,7 @@ from azure.storage.blob import generate_blob_sas, BlobSasPermissions
 from ..core.settings import settings
 from datetime import datetime, timedelta
 import logging
+from typing import Union, BinaryIO
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +42,25 @@ class AzureBlobStorageService:
                 "Set AZURE_STORAGE_CONNECTION_STRING or both AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY."
             )
 
-    async def upload_blob(self, container_key: str, blob_name: str, data: bytes) -> str:
-        """Upload blob and return its URL."""
+    async def upload_blob(self, container_key: str, blob_name: str, data: Union[bytes, BinaryIO]) -> str:
+        """
+        Upload blob and return its URL.
+        Accepts bytes or a file-like object (for streaming).
+        """
         container_name = self.CONTAINERS.get(container_key, "misc")
 
-        container_client = self.client.get_container_client(container_name)
-        blob_client = container_client.get_blob_client(blob_name)
-        await blob_client.upload_blob(data, overwrite=True)
-        return blob_client.url
+        try:
+            container_client = self.client.get_container_client(container_name)
+            blob_client = container_client.get_blob_client(blob_name)
+            
+            # upload_blob handles both bytes and file-like objects automatically
+            # If data is a file-like object, it streams it.
+            await blob_client.upload_blob(data, overwrite=True)
+            
+            return blob_client.url
+        except Exception as e:
+            logger.error(f"Failed to upload blob {blob_name} to {container_name}: {e}")
+            raise
 
     async def generate_sas_url(self, container_key: str, blob_name: str, expires_hours: int = 1) -> str:
         """Generate a SAS URL for reading a blob."""

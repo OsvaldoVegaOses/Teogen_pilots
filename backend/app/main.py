@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import projects, theory, interviews, codes, memos
+from app.api import projects, theory, interviews, codes, memos, search
 from app.core.settings import settings
 
 app = FastAPI(
@@ -34,6 +34,7 @@ app.include_router(interviews.router, prefix="/api")
 app.include_router(codes.router, prefix="/api")
 app.include_router(memos.router, prefix="/api")
 app.include_router(theory.router, prefix="/api")
+app.include_router(search.router, prefix="/api")
 
 @app.get("/")
 async def root():
