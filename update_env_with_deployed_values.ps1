@@ -72,7 +72,7 @@ MODEL_DEEPSEEK=DeepSeek-V3.2-Speciale
 
 # Azure PostgreSQL
 AZURE_PG_USER=theogenadmin
-AZURE_PG_PASSWORD=TempPass123!
+AZURE_PG_PASSWORD=<tu-password-postgres>
 AZURE_PG_HOST=$postgresHost
 AZURE_PG_DATABASE=theogen
 
@@ -81,7 +81,7 @@ AZURE_STORAGE_ACCOUNT=$storageAccount
 AZURE_STORAGE_KEY=<tu-clave-storage>
 
 # Azure AD (Entra ID)
-AZURE_AD_TENANT_ID=3e151d68-e5ed-4878-932d-251fe1b0eaf1
+AZURE_AD_TENANT_ID=<tu-tenant-id>
 AZURE_AD_CLIENT_ID=<tu-client-id>
 
 # Otros servicios
