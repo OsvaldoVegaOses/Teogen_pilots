@@ -1,0 +1,9 @@
+{
+    "spa": {
+        "redirectUris": [
+            "http://localhost:3000/",
+            "https://theogenfrontpllrx4ji.z13.web.core.windows.net/",
+            "https://theogenfrontwpdxe22pv.z13.web.core.windows.net/"
+        ]
+    }
+}
