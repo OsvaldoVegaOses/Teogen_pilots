@@ -26,6 +26,9 @@ export default function Dashboard() {
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"overview" | "codes" | "memos">("overview");
 
+    const [activeTheory, setActiveTheory] = useState<any | null>(null);
+    const [loadingTheory, setLoadingTheory] = useState(false);
+
     // Fetch projects from backend
     useEffect(() => {
         async function fetchProjects() {
@@ -53,6 +56,35 @@ export default function Dashboard() {
             fetchProjects();
         }
     }, [isAuthenticated]);
+
+    // Fetch active theory when project changes
+    useEffect(() => {
+        async function fetchTheory() {
+            if (!selectedProjectId) {
+                setActiveTheory(null);
+                return;
+            }
+
+            setLoadingTheory(true);
+            try {
+                const { apiClient } = await import("@/lib/api");
+                const response = await apiClient(`/projects/${selectedProjectId}/theories`);
+
+                if (response.ok) {
+                    const theories = await response.json();
+                    // Assuming we want the latest completed theory
+                    const latest = theories.find((t: any) => t.status === "completed" || t.status === "draft");
+                    setActiveTheory(latest || null);
+                }
+            } catch (error) {
+                console.error("Error fetching theory:", error);
+            } finally {
+                setLoadingTheory(false);
+            }
+        }
+
+        fetchTheory();
+    }, [selectedProjectId]);
 
     return (
         <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-hidden">
@@ -153,6 +185,17 @@ export default function Dashboard() {
                                         </div>
                                     ))
                                 )}
+
+                                {/* Show active theory if available */}
+                                {activeTheory && (
+                                    <div className="col-span-2 mt-8">
+                                        {/* Import dynamically to avoid SSR issues if necessary, strictly client-side here */}
+                                        {(() => {
+                                            const TheoryViewer = require("@/components/TheoryViewer").default;
+                                            return <TheoryViewer projectId={selectedProjectId!} theory={activeTheory} />;
+                                        })()}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-6">
@@ -163,18 +206,20 @@ export default function Dashboard() {
                                             onUploadSuccess={() => console.log("Refresh list...")}
                                         />
 
-                                        <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
-                                            <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
-                                            <p className="text-white/80 text-sm mb-6">
-                                                Analiza los datos del proyecto seleccionado para buscar patrones emergentes.
-                                            </p>
-                                            <button
-                                                className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
-                                                onClick={() => alert("GPT-5.2 está analizando los fragmentos...")}
-                                            >
-                                                Generar Teoría (v1.2)
-                                            </button>
-                                        </div>
+                                        {!activeTheory && (
+                                            <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
+                                                <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
+                                                <p className="text-white/80 text-sm mb-6">
+                                                    Analiza los datos del proyecto seleccionado para buscar patrones emergentes.
+                                                </p>
+                                                <button
+                                                    className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
+                                                    onClick={() => alert("GPT-5.2 está analizando los fragmentos...")}
+                                                >
+                                                    Generar Teoría (v1.2)
+                                                </button>
+                                            </div>
+                                        )}
                                     </>
                                 ) : (
                                     <div className="p-8 text-center border-2 border-dashed rounded-3xl border-zinc-200 bg-zinc-50/50">
