@@ -12,8 +12,12 @@ class FoundryOpenAIService:
     """
 
     def __init__(self):
-        self.client = None
-        self.azure_client = None
+        self._client = None
+        self._azure_client = None
+
+    def _ensure_clients(self):
+        if self._client and self._azure_client:
+            return
 
         if not settings.AZURE_OPENAI_API_KEY or not settings.AZURE_OPENAI_ENDPOINT:
             raise RuntimeError(
@@ -22,17 +26,27 @@ class FoundryOpenAIService:
             )
 
         # ✅ Async OpenAI client using the /v1/ endpoint
-        self.client = AsyncOpenAI(
+        self._client = AsyncOpenAI(
             api_key=settings.AZURE_OPENAI_API_KEY,
             base_url=f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/v1/",
         )
 
         # ✅ Async AzureOpenAI client for features like OIDC/Managed Identity
-        self.azure_client = AsyncAzureOpenAI(
+        self._azure_client = AsyncAzureOpenAI(
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
         )
+
+    @property
+    def client(self):
+        self._ensure_clients()
+        return self._client
+
+    @property
+    def azure_client(self):
+        self._ensure_clients()
+        return self._azure_client
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generates 3072-dim embeddings using text-embedding-3-large."""

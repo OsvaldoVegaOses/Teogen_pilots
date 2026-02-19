@@ -21,22 +21,33 @@ class AzureBlobStorageService:
     }
 
     def __init__(self):
-        self.client = None
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client:
+            return self._client
 
         if settings.AZURE_STORAGE_CONNECTION_STRING:
-            self.client = BlobServiceClient.from_connection_string(
+            self._client = BlobServiceClient.from_connection_string(
                 settings.AZURE_STORAGE_CONNECTION_STRING
             )
         elif settings.AZURE_STORAGE_ACCOUNT and settings.AZURE_STORAGE_KEY:
-            # Build connection string from account + key
             conn_str = (
                 f"DefaultEndpointsProtocol=https;"
                 f"AccountName={settings.AZURE_STORAGE_ACCOUNT};"
                 f"AccountKey={settings.AZURE_STORAGE_KEY};"
                 f"EndpointSuffix=core.windows.net"
             )
-            self.client = BlobServiceClient.from_connection_string(conn_str)
+            self._client = BlobServiceClient.from_connection_string(conn_str)
         else:
+            # Only log warning here, raise in methods
+            logger.warning("Azure Storage credentials not found. Calls to storage will fail.")
+        
+        return self._client
+
+    def _ensure_client(self):
+        if not self.client:
             raise RuntimeError(
                 "Azure Storage credentials not found. "
                 "Set AZURE_STORAGE_CONNECTION_STRING or both AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY."
@@ -47,6 +58,7 @@ class AzureBlobStorageService:
         Upload blob and return its URL.
         Accepts bytes or a file-like object (for streaming).
         """
+        self._ensure_client()
         container_name = self.CONTAINERS.get(container_key, "misc")
 
         try:
@@ -64,6 +76,7 @@ class AzureBlobStorageService:
 
     async def generate_sas_url(self, container_key: str, blob_name: str, expires_hours: int = 1) -> str:
         """Generate a SAS URL for reading a blob."""
+        self._ensure_client()
         if not settings.AZURE_STORAGE_ACCOUNT or not settings.AZURE_STORAGE_KEY:
             raise RuntimeError("Azure Storage credentials for SAS generation not found")
 
