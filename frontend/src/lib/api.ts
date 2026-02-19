@@ -1,3 +1,4 @@
+/** TheoGen Frontend - Deployment Trigger **/
 import { PublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./msalConfig";
 
