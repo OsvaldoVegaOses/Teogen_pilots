@@ -1,31 +1,68 @@
 "use client";
 
-import { useMsal } from "@azure/msal-react";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "@/lib/msalConfig";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function Login() {
-  const { instance, accounts } = useMsal();
+  const { instance, accounts, inProgress } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
+  // Handle the redirect response from Microsoft
   useEffect(() => {
-    if (accounts.length > 0) {
-      router.push("/dashboard");
+    console.log("[Login] Component mounted. inProgress:", inProgress, "accounts:", accounts.length, "isAuthenticated:", isAuthenticated);
+
+    // If MSAL is still processing (handleRedirectPromise in progress), wait
+    if (inProgress !== "none") {
+      console.log("[Login] MSAL interaction in progress:", inProgress);
+      setIsProcessingRedirect(true);
+      return;
     }
-  }, [accounts, router]);
+
+    // MSAL is done processing
+    setIsProcessingRedirect(false);
+
+    // If the user is authenticated, redirect to dashboard
+    if (isAuthenticated && accounts.length > 0) {
+      console.log("[Login] User is authenticated, redirecting to /dashboard. Account:", accounts[0]?.username);
+      router.replace("/dashboard/");
+    }
+  }, [inProgress, isAuthenticated, accounts, router]);
 
   const handleLogin = async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
+      console.log("[Login] Starting loginRedirect...");
       await instance.loginRedirect(loginRequest);
-    } catch (e) {
-      console.error(e);
+    } catch (e: unknown) {
+      console.error("[Login] loginRedirect error:", e);
+      setAuthError(e instanceof Error ? e.message : "Error al iniciar sesión. Intenta de nuevo.");
       setIsLoading(false);
     }
   };
+
+  // Show loading screen while processing the redirect
+  if (isProcessingRedirect || (isAuthenticated && accounts.length > 0)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <div className="text-center space-y-4">
+          <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-xl animate-pulse">
+            T
+          </div>
+          <p className="text-zinc-600 dark:text-zinc-400 text-sm animate-pulse">
+            {isAuthenticated ? "Redirigiendo al dashboard..." : "Procesando autenticación..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -54,6 +91,12 @@ export default function Login() {
             <h2 className="text-3xl font-bold tracking-tight">Bienvenido</h2>
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">Inicia sesión con tu cuenta corporativa o de Microsoft para acceder a TheoGen.</p>
           </div>
+
+          {authError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+              <p className="text-sm text-red-700 dark:text-red-400">{authError}</p>
+            </div>
+          )}
 
           <div className="mt-8 space-y-6">
             <button

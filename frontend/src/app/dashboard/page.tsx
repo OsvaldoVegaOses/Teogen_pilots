@@ -1,6 +1,6 @@
 "use client";
 
-import { useMsal } from "@azure/msal-react";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,18 +9,21 @@ import MemoManager from "@/components/MemoManager";
 import CodeExplorer from "@/components/CodeExplorer";
 
 export default function Dashboard() {
-    const { instance, accounts } = useMsal();
+    const { instance, accounts, inProgress } = useMsal();
+    const isAuthenticated = useIsAuthenticated();
     const router = useRouter();
 
     useEffect(() => {
-        if (accounts.length === 0) {
-            router.push("/login");
+        // Only redirect if MSAL is done processing and user is not authenticated
+        if (inProgress === "none" && !isAuthenticated) {
+            console.log("[Dashboard] Not authenticated, redirecting to /login/");
+            router.replace("/login/");
         }
-    }, [accounts, router]);
+    }, [inProgress, isAuthenticated, router]);
 
     const [projects] = useState([
         { id: "123e4567-e89b-12d3-a456-426614174000", name: "Impacto del Cambio Climático", interviews: 12, status: "Teorización", progress: 85 },
-        { id: "2", name: "Organización Comunitaria", interviews: 8, status: "Codificación", progress: 45 },
+        { id: "123e4567-e89b-12d3-a456-426614175555", name: "Organización Comunitaria", interviews: 8, status: "Codificación", progress: 45 },
     ]);
 
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0].id);
