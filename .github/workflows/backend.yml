@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
 
 env:
-  ACR_NAME: "axialacrnew"
-  CONTAINER_APP: "axial-api"
-  RESOURCE_GROUP: "Axial"
+  ACR_NAME: "ca39bdb671caacr"
+  CONTAINER_APP: "theogen-backend"
+  RESOURCE_GROUP: "theogen-rg-eastus"
 
 jobs:
   build-and-deploy:
