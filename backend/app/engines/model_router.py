@@ -9,8 +9,11 @@ class ModelRouterEngine:
     """Uses Model Router 2025 to select the best model for each task."""
 
     def __init__(self):
-        self.client = foundry_openai.client
         self.router_deployment = settings.MODEL_ROUTER
+
+    @property
+    def client(self):
+        return foundry_openai.client
 
     async def route_and_generate(self, task_type: str, prompt: str, **kwargs):
         """

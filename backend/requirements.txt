@@ -26,3 +26,6 @@ networkx
 pandas
 numpy
 tenacity
+reportlab
+pytest
+pytest-asyncio

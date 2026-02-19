@@ -115,9 +115,10 @@ async def upload_interview(
 
 async def process_transcription(interview_id: UUID, blob_name: str):
     """Background task for transcription using axial-speech with gpt-4o fallback."""
-    from ..database import AsyncSessionLocal
+    from ..database import get_session_local
+    session_local = get_session_local()
 
-    async with AsyncSessionLocal() as db_session:
+    async with session_local() as db_session:
         try:
             logger.info(f"Starting transcription for interview {interview_id}")
 
