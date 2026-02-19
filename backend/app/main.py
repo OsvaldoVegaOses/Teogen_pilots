@@ -15,7 +15,9 @@ origins = [
     settings.FRONTEND_URL,
     "http://localhost:3000",
     "https://theogenfrontwpdxe2pv.z13.web.core.windows.net",
-    "https://theogen-app.whitepebble-c2a4715b.eastus.azurecontainerapps.io"
+    "https://theogenfrontpllrx4ji.z13.web.core.windows.net", # URL actual del usuario
+    "https://theogen-app.whitepebble-c2a4715b.eastus.azurecontainerapps.io",
+    "https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io"
 ]
 # Clean up empty strings or duplicates
 origins = list(set([o for o in origins if o]))
