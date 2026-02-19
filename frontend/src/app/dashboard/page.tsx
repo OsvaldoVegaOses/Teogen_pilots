@@ -21,13 +21,38 @@ export default function Dashboard() {
         }
     }, [inProgress, isAuthenticated, router]);
 
-    const [projects] = useState([
-        { id: "123e4567-e89b-12d3-a456-426614174000", name: "Impacto del Cambio Climático", interviews: 12, status: "Teorización", progress: 85 },
-        { id: "123e4567-e89b-12d3-a456-426614175555", name: "Organización Comunitaria", interviews: 8, status: "Codificación", progress: 45 },
-    ]);
-
-    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0].id);
+    const [projects, setProjects] = useState<any[]>([]);
+    const [loadingProjects, setLoadingProjects] = useState(true);
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"overview" | "codes" | "memos">("overview");
+
+    // Fetch projects from backend
+    useEffect(() => {
+        async function fetchProjects() {
+            if (!isAuthenticated) return;
+
+            try {
+                // Import apiClient dynamically to avoid issues if not used properly in client component
+                const { apiClient } = await import("@/lib/api");
+                const response = await apiClient("/projects/");
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setProjects(data);
+                } else {
+                    console.error("Failed to fetch projects");
+                }
+            } catch (error) {
+                console.error("Error loading projects:", error);
+            } finally {
+                setLoadingProjects(false);
+            }
+        }
+
+        if (isAuthenticated) {
+            fetchProjects();
+        }
+    }, [isAuthenticated]);
 
     return (
         <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-hidden">
@@ -48,13 +73,15 @@ export default function Dashboard() {
                     </button>
                     <button
                         onClick={() => setActiveTab("codes")}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         📚 Libro de Códigos
                     </button>
                     <button
                         onClick={() => setActiveTab("memos")}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         📝 Memos
                     </button>
@@ -85,57 +112,75 @@ export default function Dashboard() {
                     {activeTab === "overview" && (
                         <div className="grid gap-10 lg:grid-cols-3">
                             <div className="lg:col-span-2 grid gap-6 md:grid-cols-2 self-start">
-                                {projects.map((project) => (
-                                    <div
-                                        key={project.id}
-                                        onClick={() => setSelectedProjectId(project.id)}
-                                        className={`cursor-pointer group relative rounded-3xl border p-8 transition-all hover:shadow-xl ${selectedProjectId === project.id ? 'border-indigo-600 bg-white ring-2 ring-indigo-600/10' : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/50'}`}
-                                    >
-                                        <div className="flex items-start justify-between mb-4">
-                                            <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">{project.status}</span>
-                                            <span className="text-2xl">📁</span>
-                                        </div>
-                                        <h3 className="text-xl font-bold dark:text-white">{project.name}</h3>
-                                        <p className="mt-2 text-sm text-zinc-500">{project.interviews} entrevistas codificadas</p>
-
-                                        <div className="mt-6">
-                                            <div className="flex justify-between text-xs font-bold mb-2 dark:text-zinc-400">
-                                                <span>Progreso de Saturación</span>
-                                                <span>{project.progress}%</span>
-                                            </div>
-                                            <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800">
-                                                <div
-                                                    className="h-full rounded-full bg-indigo-600 transition-all duration-1000 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
-                                                    style={{ width: `${project.progress}%` }}
-                                                />
-                                            </div>
-                                        </div>
+                                {loadingProjects ? (
+                                    <p className="text-zinc-500">Cargando proyectos...</p>
+                                ) : projects.length === 0 ? (
+                                    <div className="col-span-2 p-10 text-center border-2 border-dashed rounded-3xl border-zinc-200">
+                                        <p className="text-zinc-400 mb-4">No tienes proyectos activos.</p>
+                                        <button className="text-indigo-600 font-bold hover:underline">
+                                            Crear tu primer proyecto de investigación
+                                        </button>
                                     </div>
-                                ))}
+                                ) : (
+                                    projects.map((project) => (
+                                        <div
+                                            key={project.id}
+                                            onClick={() => setSelectedProjectId(project.id)}
+                                            className={`cursor-pointer group relative rounded-3xl border p-8 transition-all hover:shadow-xl ${selectedProjectId === project.id ? 'border-indigo-600 bg-white ring-2 ring-indigo-600/10' : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/50'}`}
+                                        >
+                                            <div className="flex items-start justify-between mb-4">
+                                                <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">Active</span>
+                                                <span className="text-2xl">📁</span>
+                                            </div>
+                                            <h3 className="text-xl font-bold dark:text-white truncate" title={project.name}>{project.name}</h3>
+                                            <p className="mt-2 text-sm text-zinc-500 line-clamp-2">{project.description || "Sin descripción"}</p>
+
+                                            {/* Progress Bar (Hidden if no saturation data) */}
+                                            {project.saturation_score !== undefined && (
+                                                <div className="mt-6">
+                                                    <div className="flex justify-between text-xs font-bold mb-2 dark:text-zinc-400">
+                                                        <span>Progreso de Saturación</span>
+                                                        <span>{Math.round(project.saturation_score * 100)}%</span>
+                                                    </div>
+                                                    <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800">
+                                                        <div
+                                                            className="h-full rounded-full bg-indigo-600 transition-all duration-1000 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+                                                            style={{ width: `${project.saturation_score * 100}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             <div className="space-y-6">
                                 {selectedProjectId ? (
-                                    <InterviewUpload
-                                        projectId={selectedProjectId}
-                                        onUploadSuccess={() => console.log("Refresh list...")}
-                                    />
+                                    <>
+                                        <InterviewUpload
+                                            projectId={selectedProjectId}
+                                            onUploadSuccess={() => console.log("Refresh list...")}
+                                        />
+
+                                        <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
+                                            <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
+                                            <p className="text-white/80 text-sm mb-6">
+                                                Analiza los datos del proyecto seleccionado para buscar patrones emergentes.
+                                            </p>
+                                            <button
+                                                className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
+                                                onClick={() => alert("GPT-5.2 está analizando los fragmentos...")}
+                                            >
+                                                Generar Teoría (v1.2)
+                                            </button>
+                                        </div>
+                                    </>
                                 ) : (
-                                    <div className="p-8 text-center border-2 border-dashed rounded-3xl border-zinc-200">
-                                        <p className="text-zinc-400">Selecciona un proyecto para subir entrevistas.</p>
+                                    <div className="p-8 text-center border-2 border-dashed rounded-3xl border-zinc-200 bg-zinc-50/50">
+                                        <p className="text-zinc-400">Selecciona un proyecto para ver acciones disponibles.</p>
                                     </div>
                                 )}
-
-                                <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
-                                    <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
-                                    <p className="text-white/80 text-sm mb-6">Analiza las {projects.find(p => p.id === selectedProjectId)?.interviews} entrevistas para buscar patrones emergentes.</p>
-                                    <button
-                                        className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
-                                        onClick={() => alert("GPT-5.2 está analizando los fragmentos...")}
-                                    >
-                                        Generar Teoría (v1.2)
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     )}
