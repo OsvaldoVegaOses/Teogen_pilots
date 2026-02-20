@@ -1,22 +1,12 @@
 "use client";
 
 import { MsalProvider } from "@azure/msal-react";
-import { PublicClientApplication, EventType } from "@azure/msal-browser";
-import { msalConfig } from "@/lib/msalConfig";
+import { EventType, EventMessage, AuthenticationResult } from "@azure/msal-browser";
+import { ensureMsalInitialized, getMsalInstance } from "@/lib/msalInstance";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
 interface ProvidersProps {
     children: ReactNode;
-}
-
-// Create a single MSAL instance (singleton)
-let msalInstanceSingleton: PublicClientApplication | null = null;
-
-function getMsalInstance(): PublicClientApplication {
-    if (!msalInstanceSingleton) {
-        msalInstanceSingleton = new PublicClientApplication(msalConfig);
-    }
-    return msalInstanceSingleton;
 }
 
 export function Providers({ children }: ProvidersProps) {
@@ -29,41 +19,32 @@ export function Providers({ children }: ProvidersProps) {
 
         const instance = getMsalInstance();
 
-        // Add event callback for debugging
-        const callbackId = instance.addEventCallback((event) => {
-            if (event.eventType === EventType.LOGIN_SUCCESS) {
-                console.log("[Providers] Login success event received");
+        // Use event callbacks to handle login results instead of calling handleRedirectPromise manually.
+        // MsalProvider already calls handleRedirectPromise internally — calling it twice causes warnings.
+        const callbackId = instance.addEventCallback((event: EventMessage) => {
+            if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
+                const result = event.payload as AuthenticationResult;
+                console.log("[Providers] Login success, account:", result.account?.username);
+                instance.setActiveAccount(result.account);
             } else if (event.eventType === EventType.ACQUIRE_TOKEN_FAILURE) {
-                console.error("[Providers] Acquire token failure event:", event.error);
-            } else if (event.eventType === EventType.HANDLE_REDIRECT_START) {
-                console.log("[Providers] handleRedirectPromise started");
+                console.error("[Providers] Acquire token failure:", event.error);
             } else if (event.eventType === EventType.HANDLE_REDIRECT_END) {
                 console.log("[Providers] handleRedirectPromise completed");
-            }
-        });
-
-        instance.initialize().then(() => {
-            console.log("[Providers] MSAL initialized successfully");
-
-            // Handle redirect promise - this processes the response from Microsoft
-            return instance.handleRedirectPromise();
-        }).then((response) => {
-            if (response) {
-                console.log("[Providers] Redirect response received, account:", response.account?.username);
-                // Set the account that just logged in as active
-                instance.setActiveAccount(response.account);
-            } else {
-                console.log("[Providers] No redirect response (normal page load)");
-                // Check if there's already an active account
+                // After redirect is handled, ensure an active account is set from cache
                 const accounts = instance.getAllAccounts();
                 if (accounts.length > 0 && !instance.getActiveAccount()) {
                     instance.setActiveAccount(accounts[0]);
                     console.log("[Providers] Set active account from cache:", accounts[0].username);
                 }
             }
+        });
+
+        // Only initialize MSAL — do NOT call handleRedirectPromise here
+        ensureMsalInitialized().then(() => {
+            console.log("[Providers] MSAL initialized successfully");
             setIsInitialized(true);
         }).catch((e) => {
-            console.error("[Providers] MSAL initialization or redirect handling failed:", e);
+            console.error("[Providers] MSAL initialization failed:", e);
             setIsInitialized(true); // Still show UI so user can try again
         });
 

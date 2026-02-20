@@ -1,5 +1,18 @@
 # Script para obtener las claves reales de los recursos de Azure
-
+#El script se conecta a tu cuenta de Azure y "extrae" automáticamente las claves de acceso de tus servicios activos para que no tengas que buscarlas manualmente en el portal web:
+#Claves de Almacenamiento (Storage): Obtiene la llave secreta necesaria para subir y bajar los audios de las entrevistas.
+#Claves de Redis: Extrae la contraseña del servidor de caché para que la app vuele.
+#Claves de Voz (Speech): Consigue el código para que la IA pueda transcribir tus audios.
+#Datos de Base de Datos (PostgreSQL): Te da la dirección del servidor (el Host) y el usuario administrador. (Ojo: por seguridad, Azure no permite "extraer" la contraseña de la base de datos, así que esa sí debes recordarla).
+#¿Cuándo usarlo?
+#Si perdiste tu archivo 
+#.env
+#Si instalaste el proyecto en una computadora nueva y necesitas configurar las variables de entorno rápidamente.
+#Si cambiaste alguna clave en el portal de Azure y quieres sincronizar tu código local.
+#Resumen:
+#Es un asistente de configuración. Lo ejecutas, él te imprime en pantalla todas las claves y tú solo tienes que copiar y pegar en tu archivo 
+#.env
+####
 Write-Host "===========================================" -ForegroundColor Green
 Write-Host "    Obtención de Claves de Azure" -ForegroundColor Green
 Write-Host "===========================================" -ForegroundColor Green

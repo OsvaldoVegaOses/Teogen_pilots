@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import projects, theory, interviews, codes, memos, search
 from app.core.settings import settings
+from app.services.neo4j_service import neo4j_service
+from app.services.qdrant_service import qdrant_service
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -38,6 +40,29 @@ app.include_router(codes.router, prefix="/api")
 app.include_router(memos.router, prefix="/api")
 app.include_router(theory.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
+
+@app.on_event("startup")
+async def startup_checks():
+    if settings.TESTING:
+        return
+
+    required_env = {
+        "NEO4J_URI": settings.NEO4J_URI,
+        "NEO4J_USER": settings.NEO4J_USER,
+        "NEO4J_PASSWORD": settings.NEO4J_PASSWORD,
+        "QDRANT_URL": settings.QDRANT_URL,
+    }
+    missing = [name for name, value in required_env.items() if not value]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    neo4j_ok = await neo4j_service.verify_connectivity()
+    if not neo4j_ok:
+        raise RuntimeError("Neo4j connectivity check failed during startup")
+
+    qdrant_ok = await qdrant_service.verify_connectivity()
+    if not qdrant_ok:
+        raise RuntimeError("Qdrant connectivity check failed during startup")
 
 @app.get("/")
 async def root():

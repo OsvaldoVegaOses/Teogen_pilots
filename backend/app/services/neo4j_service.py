@@ -1,6 +1,6 @@
 
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 
 from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession
@@ -58,7 +58,7 @@ class FoundryNeo4jService:
         if not self.enabled: return
 
         query = """
-        MATCH (p:Project {id: $project_id})
+        MERGE (p:Project {id: $project_id})
         MERGE (c:Code {id: $code_id})
         SET c.label = $label, c.project_id = $project_id
         MERGE (p)-[:HAS_CODE]->(c)
@@ -75,7 +75,7 @@ class FoundryNeo4jService:
         if not self.enabled: return
 
         query = """
-        MATCH (p:Project {id: $project_id})
+        MERGE (p:Project {id: $project_id})
         MERGE (f:Fragment {id: $fragment_id})
         SET f.text_snippet = $text_snippet, f.project_id = $project_id
         MERGE (p)-[:HAS_FRAGMENT]->(f)
@@ -106,7 +106,7 @@ class FoundryNeo4jService:
         if not self.enabled: return
 
         query = """
-        MATCH (p:Project {id: $project_id})
+        MERGE (p:Project {id: $project_id})
         MERGE (cat:Category {id: $category_id})
         SET cat.name = $name
         MERGE (p)-[:HAS_CATEGORY]->(cat)
@@ -132,6 +132,69 @@ class FoundryNeo4jService:
             "category_id": str(category_id)
         })
 
+    async def ensure_project_node(self, project_id: UUID, name: str = "Unnamed Project"):
+        """Ensures a project node exists before syncing related entities."""
+        if not self.enabled:
+            raise RuntimeError("Neo4j service is not enabled")
+        await self.create_project_node(project_id, name or "Unnamed Project")
+
+    async def get_project_network_metrics(self, project_id: UUID) -> Dict[str, Any]:
+        """
+        Returns graph metrics used by theory generation.
+        Raises when project has no usable graph data.
+        """
+        if not self.enabled or not self.driver:
+            raise RuntimeError("Neo4j service is not enabled")
+
+        project_id_str = str(project_id)
+
+        counts_query = """
+        MATCH (p:Project {id: $project_id})
+        OPTIONAL MATCH (p)-[:HAS_CATEGORY]->(cat:Category)
+        WITH p, count(DISTINCT cat) AS category_count
+        OPTIONAL MATCH (p)-[:HAS_CODE]->(c:Code)
+        WITH p, category_count, count(DISTINCT c) AS code_count
+        OPTIONAL MATCH (p)-[:HAS_FRAGMENT]->(f:Fragment)
+        RETURN category_count, code_count, count(DISTINCT f) AS fragment_count
+        """
+
+        centrality_query = """
+        MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(cat:Category)
+        OPTIONAL MATCH (cat)-[:CONTAINS]->(c:Code)-[:APPLIES_TO]->(:Fragment)<-[:APPLIES_TO]-(other:Code)
+        WITH cat, count(DISTINCT c) AS code_degree, count(DISTINCT other) AS fragment_degree
+        RETURN cat.id AS category_id, cat.name AS category_name, code_degree, fragment_degree
+        ORDER BY code_degree DESC, fragment_degree DESC
+        """
+
+        cooccurrence_query = """
+        MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[:CONTAINS]->(:Code)-[:APPLIES_TO]->(f:Fragment)<-[:APPLIES_TO]-(:Code)<-[:CONTAINS]-(c2:Category)
+        WHERE c1.id < c2.id
+        RETURN c1.id AS category_a_id, c1.name AS category_a_name,
+               c2.id AS category_b_id, c2.name AS category_b_name,
+               count(DISTINCT f) AS shared_fragments
+        ORDER BY shared_fragments DESC
+        """
+
+        counts_data = await self._execute_read(counts_query, {"project_id": project_id_str})
+        centrality_data = await self._execute_read(centrality_query, {"project_id": project_id_str})
+        cooccurrence_data = await self._execute_read(cooccurrence_query, {"project_id": project_id_str})
+
+        counts = counts_data[0] if counts_data else {
+            "category_count": 0,
+            "code_count": 0,
+            "fragment_count": 0
+        }
+
+        if counts.get("category_count", 0) == 0:
+            raise ValueError(f"No category nodes found in Neo4j for project {project_id_str}")
+
+        return {
+            "project_id": project_id_str,
+            "counts": counts,
+            "category_centrality": centrality_data,
+            "category_cooccurrence": cooccurrence_data,
+        }
+
     async def close(self):
         """Closes the Neo4j driver connection."""
         if self.driver:
@@ -144,5 +207,16 @@ class FoundryNeo4jService:
                 await session.run(query, parameters)
         except Exception as e:
             logger.error(f"Neo4j write failed: {e}")
+            raise
+
+    async def _execute_read(self, query: str, parameters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Internal helper to execute read queries and return plain dict rows."""
+        try:
+            async with self.driver.session() as session:
+                result = await session.run(query, parameters)
+                return await result.data()
+        except Exception as e:
+            logger.error(f"Neo4j read failed: {e}")
+            raise
 
 neo4j_service = FoundryNeo4jService()

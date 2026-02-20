@@ -28,6 +28,8 @@ export default function Dashboard() {
 
     const [activeTheory, setActiveTheory] = useState<any | null>(null);
     const [loadingTheory, setLoadingTheory] = useState(false);
+    const [generatingTheory, setGeneratingTheory] = useState(false);
+    const [theoryMessage, setTheoryMessage] = useState("");
 
     // Fetch projects from backend
     useEffect(() => {
@@ -86,6 +88,84 @@ export default function Dashboard() {
         fetchTheory();
     }, [selectedProjectId]);
 
+    async function handleSync() {
+        setLoadingProjects(true);
+        try {
+            const { apiClient } = await import("@/lib/api");
+            const response = await apiClient("/projects/");
+            if (response.ok) {
+                const data = await response.json();
+                setProjects(data);
+            }
+        } catch (error) {
+            console.error("Error syncing:", error);
+        } finally {
+            setLoadingProjects(false);
+        }
+    }
+
+    async function handleCreateProject() {
+        const name = prompt("Nombre del nuevo proyecto:");
+        if (!name) return;
+
+        try {
+            const { apiClient } = await import("@/lib/api");
+            const response = await apiClient("/projects/", {
+                method: "POST",
+                body: JSON.stringify({
+                    name,
+                    description: "Proyecto de investigación",
+                    methodological_profile: "constructivist",
+                    language: "es"
+                })
+            });
+
+            if (response.ok) {
+                const newProj = await response.json();
+                setProjects(prev => [newProj, ...prev]);
+                setSelectedProjectId(newProj.id);
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                alert(`Error al crear proyecto: ${errData.detail || response.statusText}`);
+            }
+        } catch (error) {
+            console.error("Creation error:", error);
+            alert("Error de conexión al crear proyecto");
+        }
+    }
+
+    async function handleGenerateTheory() {
+        if (!selectedProjectId || generatingTheory) return;
+
+        setGeneratingTheory(true);
+        setTheoryMessage("⏳ Generando teoría... este proceso puede tardar unos minutos.");
+
+        try {
+            const { apiClient } = await import("@/lib/api");
+            const response = await apiClient(`/projects/${selectedProjectId}/generate-theory`, {
+                method: "POST",
+                body: JSON.stringify({
+                    min_interviews: 1,
+                    use_model_router: true,
+                }),
+            });
+
+            if (response.ok) {
+                const theory = await response.json();
+                setActiveTheory(theory);
+                setTheoryMessage("✅ Teoría generada correctamente.");
+            } else {
+                const err = await response.json().catch(() => ({}));
+                setTheoryMessage(`❌ ${err.detail || "No se pudo generar la teoría."}`);
+            }
+        } catch (error) {
+            console.error("Error generating theory:", error);
+            setTheoryMessage("❌ Error de conexión al generar teoría.");
+        } finally {
+            setGeneratingTheory(false);
+        }
+    }
+
     return (
         <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-hidden">
             {/* Sidebar */}
@@ -131,10 +211,16 @@ export default function Dashboard() {
                         </h1>
                     </div>
                     <div className="flex gap-4">
-                        <button className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white">
+                        <button
+                            onClick={handleSync}
+                            className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
+                        >
                             Sincronizar Cloud
                         </button>
-                        <button className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all">
+                        <button
+                            onClick={handleCreateProject}
+                            className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
+                        >
                             + Nuevo Proyecto
                         </button>
                     </div>
@@ -149,7 +235,10 @@ export default function Dashboard() {
                                 ) : projects.length === 0 ? (
                                     <div className="col-span-2 p-10 text-center border-2 border-dashed rounded-3xl border-zinc-200">
                                         <p className="text-zinc-400 mb-4">No tienes proyectos activos.</p>
-                                        <button className="text-indigo-600 font-bold hover:underline">
+                                        <button
+                                            onClick={handleCreateProject}
+                                            className="text-indigo-600 font-bold hover:underline"
+                                        >
                                             Crear tu primer proyecto de investigación
                                         </button>
                                     </div>
@@ -214,10 +303,14 @@ export default function Dashboard() {
                                                 </p>
                                                 <button
                                                     className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
-                                                    onClick={() => alert("GPT-5.2 está analizando los fragmentos...")}
+                                                    onClick={handleGenerateTheory}
+                                                    disabled={generatingTheory}
                                                 >
-                                                    Generar Teoría (v1.2)
+                                                    {generatingTheory ? "Generando teoría..." : "Generar Teoría (v1.2)"}
                                                 </button>
+                                                {theoryMessage && (
+                                                    <p className="mt-3 text-xs font-medium text-white/90">{theoryMessage}</p>
+                                                )}
                                             </div>
                                         )}
                                     </>

@@ -47,7 +47,7 @@ export default function Home() {
                 Crear primer proyecto
               </Link>
               <Link 
-                href="/demo" 
+                href="#features" 
                 className="h-14 w-full rounded-2xl border border-zinc-200 bg-white/50 px-8 flex items-center justify-center text-lg font-bold backdrop-blur-sm transition-all hover:bg-white dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:bg-zinc-900 sm:w-auto"
               >
                 Ver Demo

@@ -1,4 +1,11 @@
 # Script para desplegar los recursos restantes de TheoGen (Corregido para East US)
+#El script deploy_remaining_fixed.ps1 es tu herramienta de "Rescate de Infraestructura". Solo debes usarlo en casos excepcionales, no para el día a día.
+#
+#Cuándo usarlo:
+#Si borraste algo por error: Si accidentalmente eliminaste la base de datos (Postgres), el servidor de Redis o la cuenta de almacenamiento de archivos en el portal de Azure.
+#Si cambias de suscripción: Si en el futuro quieres desplegar todo este sistema en una suscripción de Azure distinta.
+#Si quieres "clonar" el sistema: Si quieres crear una instancia idéntica de TheoGen para otro departamento o cliente.
+#
 
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host "Desplegando recursos restantes de TheoGen" -ForegroundColor Green

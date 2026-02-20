@@ -17,7 +17,7 @@ Security flow:
 import logging
 import time
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, NAMESPACE_URL, uuid5
 
 import httpx
 from fastapi import Depends, HTTPException, status
@@ -106,8 +106,20 @@ class CurrentUser(BaseModel):
 
     @property
     def user_uuid(self) -> UUID:
-        """Convert the Azure AD oid to a UUID for database operations."""
-        return UUID(self.oid)
+        """
+        Converts token user identifier to UUID for DB operations.
+        If the claim is not a canonical UUID (common with some `sub` values),
+        derive a stable UUIDv5 so project ownership remains deterministic.
+        """
+        try:
+            return UUID(self.oid)
+        except (ValueError, TypeError):
+            stable_uuid = uuid5(NAMESPACE_URL, f"theogen-user:{self.oid}")
+            logger.warning(
+                "Token user identifier is not UUID. Using stable UUIDv5 fallback.",
+                extra={"raw_user_id": self.oid, "stable_user_uuid": str(stable_uuid)},
+            )
+            return stable_uuid
 
 
 # ──────────────────────────────────────────────

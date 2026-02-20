@@ -1,21 +1,6 @@
 /** TheoGen Frontend - Deployment Trigger **/
-import { PublicClientApplication, AccountInfo } from "@azure/msal-browser";
-import { msalConfig, loginRequest } from "./msalConfig";
-
-let msalInstance: PublicClientApplication | null = null;
-let msalPromise: Promise<void> | null = null;
-
-// Helper to initialize MSAL once
-async function getMsalInstance() {
-    if (!msalInstance) {
-        msalInstance = new PublicClientApplication(msalConfig);
-    }
-    if (!msalPromise) {
-        msalPromise = msalInstance.initialize();
-    }
-    await msalPromise;
-    return msalInstance;
-}
+import { loginRequest } from "./msalConfig";
+import { ensureMsalInitialized } from "./msalInstance";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -23,7 +8,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8
  * Helper to get the access token silently.
  */
 async function getAccessToken(): Promise<string | null> {
-    const instance = await getMsalInstance();
+    const instance = await ensureMsalInitialized();
     const accounts = instance.getAllAccounts();
 
     if (accounts.length === 0) {
@@ -31,14 +16,23 @@ async function getAccessToken(): Promise<string | null> {
         return null;
     }
 
+    const activeAccount = instance.getActiveAccount() || accounts[0];
+    if (!instance.getActiveAccount()) {
+        instance.setActiveAccount(activeAccount);
+    }
+
     const request = {
         ...loginRequest,
-        account: accounts[0], // Use the first active account
+        account: activeAccount,
     };
 
     try {
         const response = await instance.acquireTokenSilent(request);
-        return response.accessToken;
+        // Use idToken, NOT accessToken. With OIDC-only scopes (openid/profile/email),
+        // accessToken is issued for Microsoft Graph (different signing keys & audience).
+        // The backend validates tokens against our app's CLIENT_ID as audience,
+        // which matches the idToken. See auth.py for the validation logic.
+        return response.idToken;
     } catch (error) {
         console.warn("Silent token acquisition failed, user interaction needed", error);
         return null;

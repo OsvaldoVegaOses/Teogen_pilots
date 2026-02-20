@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -23,6 +23,16 @@ class ProjectResponse(ProjectBase):
     owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("methodological_profile", mode="before")
+    @classmethod
+    def default_methodological_profile(cls, value):
+        return value or "straussian"
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def default_language(cls, value):
+        return value or "es"
 
     class Config:
         from_attributes = True

@@ -3,7 +3,6 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-import asyncio
 from qdrant_client import AsyncQdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 from ..core.settings import settings
@@ -34,6 +33,21 @@ class FoundryQdrantService:
                 logger.error(f"Failed to initialize Qdrant client: {e}")
         else:
             logger.info("Qdrant URL not set. Vector search capabilities disabled.")
+
+    def ensure_available(self):
+        """Raises if Qdrant is not configured/initialized."""
+        if not self.enabled or not self.client:
+            raise RuntimeError("Qdrant service is not enabled")
+
+    async def verify_connectivity(self) -> bool:
+        """Checks if Qdrant is reachable."""
+        self.ensure_available()
+        try:
+            await self.client.get_collections()
+            return True
+        except Exception as e:
+            logger.error(f"Qdrant connectivity check failed: {e}")
+            return False
 
     def _get_collection_name(self, project_id: UUID) -> str:
         """Standardizes collection name format."""
@@ -113,6 +127,33 @@ class FoundryQdrantService:
         except Exception as e:
             logger.error(f"Qdrant search failed: {e}")
             return []
+
+    async def search_supporting_fragments(
+        self,
+        project_id: UUID,
+        query_vector: List[float],
+        limit: int = 3,
+        score_threshold: float = 0.6,
+    ) -> List[dict]:
+        """
+        Returns normalized semantic evidence payload for theory generation.
+        """
+        hits = await self.search_similar(
+            project_id=project_id,
+            vector=query_vector,
+            limit=limit,
+            score_threshold=score_threshold,
+        )
+        evidence = []
+        for hit in hits:
+            payload = hit.payload or {}
+            evidence.append({
+                "fragment_id": str(hit.id),
+                "score": float(hit.score),
+                "text": payload.get("text", ""),
+                "codes": payload.get("codes", []),
+            })
+        return evidence
 
     async def delete_collection(self, project_id: UUID):
         """Deletes a project's collection (e.g. on project deletion)."""

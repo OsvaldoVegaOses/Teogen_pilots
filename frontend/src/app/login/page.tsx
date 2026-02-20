@@ -125,7 +125,7 @@ export default function Login() {
               </div>
 
               <div className="mt-6 text-center text-xs text-zinc-500">
-                <p>Al continuar, aceptas nuestros <Link href="/terms" className="underline hover:text-indigo-500">Términos de Servicio</Link> y <Link href="/privacy" className="underline hover:text-indigo-500">Política de Privacidad</Link>.</p>
+                <p>Al continuar, aceptas nuestros <Link href="/#" className="underline hover:text-indigo-500">Términos de Servicio</Link> y <Link href="/#" className="underline hover:text-indigo-500">Política de Privacidad</Link>.</p>
               </div>
             </div>
           </div>

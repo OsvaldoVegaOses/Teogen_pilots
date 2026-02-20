@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from typing import List
 from ..database import get_db
 from ..models.models import Project
@@ -16,6 +17,14 @@ async def create_project(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if project_in.id:
+        existing_project_result = await db.execute(select(Project).where(Project.id == project_in.id))
+        if existing_project_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Project ID already exists",
+            )
+
     new_project = Project(
         name=project_in.name,
         description=project_in.description,
@@ -26,7 +35,14 @@ async def create_project(
     if project_in.id:
         new_project.id = project_in.id
     db.add(new_project)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Project already exists or violates a uniqueness constraint",
+        )
     await db.refresh(new_project)
     return new_project
 

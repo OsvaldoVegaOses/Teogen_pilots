@@ -4,6 +4,9 @@ from typing import List, Optional
 from uuid import UUID
 import uuid
 import logging
+import asyncio
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +125,14 @@ async def process_transcription(interview_id: UUID, blob_name: str):
         try:
             logger.info(f"Starting transcription for interview {interview_id}")
 
+            interview_result = await db_session.execute(
+                select(Interview).filter(Interview.id == interview_id)
+            )
+            interview = interview_result.scalar_one_or_none()
+            if interview:
+                interview.transcription_status = "processing"
+                await db_session.commit()
+
             sas_url = await storage_service.generate_sas_url("audio", blob_name)
             
             result = await transcription_service.transcribe_interview(sas_url)
@@ -182,4 +193,26 @@ async def list_interviews(
         raise HTTPException(status_code=404, detail="Project not found")
 
     result = await db.execute(select(Interview).filter(Interview.project_id == project_id))
-    return result.scalars().all()
+    interviews = result.scalars().all()
+
+    now = datetime.utcnow()
+    for interview in interviews:
+        should_retry_failed = interview.transcription_status == "failed"
+        should_retry_stale_processing = (
+            interview.transcription_status == "processing"
+            and interview.created_at
+            and (now - interview.created_at) > timedelta(minutes=10)
+        )
+
+        if (should_retry_failed or should_retry_stale_processing) and interview.audio_blob_url:
+            parsed = urlparse(interview.audio_blob_url)
+            path = parsed.path.lstrip("/")
+            container_prefix = "theogen-audio/"
+            if path.startswith(container_prefix):
+                blob_name = path[len(container_prefix):]
+                if blob_name:
+                    interview.transcription_status = "retrying"
+                    await db.commit()
+                    asyncio.create_task(process_transcription(interview.id, blob_name))
+
+    return interviews

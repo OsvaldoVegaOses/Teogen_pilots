@@ -16,6 +16,8 @@ export default function MemoManager({ projectId }: { projectId: string }) {
     const [newTitle, setNewTitle] = useState("");
     const [newContent, setNewContent] = useState("");
     const [loading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
+    const [successMessage, setSuccessMessage] = useState("");
 
     useEffect(() => {
         if (projectId) fetchMemos();
@@ -24,13 +26,21 @@ export default function MemoManager({ projectId }: { projectId: string }) {
     const fetchMemos = async () => {
         try {
             const res = await apiClient(`memos/project/${projectId}`);
-            if (res.ok) setMemos(await res.json());
+            if (res.ok) {
+                setMemos(await res.json());
+                setErrorMessage("");
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setErrorMessage(err.detail || "No se pudieron cargar los memos.");
+            }
         } catch (e) { console.error("Error fetching memos:", e); }
     };
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setErrorMessage("");
+        setSuccessMessage("");
         try {
             const res = await apiClient("memos", {
                 method: "POST",
@@ -43,7 +53,11 @@ export default function MemoManager({ projectId }: { projectId: string }) {
             if (res.ok) {
                 setNewTitle("");
                 setNewContent("");
+                setSuccessMessage("✅ Memo guardado correctamente.");
                 fetchMemos();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setErrorMessage(err.detail || "No se pudo guardar el memo.");
             }
         } catch (e) { console.error("Error creating memo:", e); }
         finally { setLoading(false); }
@@ -73,8 +87,10 @@ export default function MemoManager({ projectId }: { projectId: string }) {
                         disabled={loading || !newTitle || !newContent}
                         className="w-full rounded-2xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700 disabled:opacity-50 transition-all"
                     >
-                        Guardar Memo
+                        {loading ? "Guardando memo..." : "Guardar Memo"}
                     </button>
+                    {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
+                    {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
                 </form>
             </div>
 

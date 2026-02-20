@@ -15,7 +15,8 @@ try {
         throw "Azure CLI no está instalado o no está en el PATH"
     }
     Write-Host "Azure CLI encontrado" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "Error: Azure CLI no está instalado o no está en el PATH." -ForegroundColor Red
     Write-Host "Por favor, instala Azure CLI desde: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli" -ForegroundColor Yellow
     exit 1
@@ -29,7 +30,8 @@ try {
     }
     Write-Host "Sesión activa en Azure para: $($account.user.name)" -ForegroundColor Green
     Write-Host "Suscripción: $($account.name)" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "Error: No hay sesión activa en Azure." -ForegroundColor Red
     Write-Host "Por favor, inicia sesión con: az login" -ForegroundColor Yellow
     exit 1
@@ -41,13 +43,14 @@ try {
     $npmVersion = npm --version
     Write-Host "Node.js encontrado: $nodeVersion" -ForegroundColor Green
     Write-Host "npm encontrado: $npmVersion" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "Error: Node.js o npm no están instalados o no están en el PATH." -ForegroundColor Red
     exit 1
 }
 
 # Variables del despliegue
-$resourceGroupName = "theogen-rg-eastus"
+$resourceGroupName = "theogen-rg"
 $projectName = "theogen"
 $location = "East US"
 $environment = "prod"
@@ -64,7 +67,8 @@ if ($rgExists -eq "false") {
         exit 1
     }
     Write-Host "Grupo de recursos creado exitosamente" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "Grupo de recursos $resourceGroupName ya existe" -ForegroundColor Green
 }
 
@@ -90,13 +94,20 @@ if (Test-Path $frontendPath) {
     
     # Construir la aplicación para producción
     Write-Host "Construyendo la aplicación para producción..." -ForegroundColor Yellow
+    # Inyectar variables de entorno para que Next.js las incluya en el build estático
+    Write-Host "Inyectando variables de entorno para el build..." -ForegroundColor Cyan
+    $env:NEXT_PUBLIC_API_BASE_URL = "https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io/api"
+    $env:NEXT_PUBLIC_AZURE_AD_TENANT_ID = "3e151d68-e5ed-4878-932d-251fe1b0eaf1"
+    $env:NEXT_PUBLIC_AZURE_AD_CLIENT_ID = "c6d2cf71-dcd2-4400-a8be-9eb8c16b1174"
+    
     npm run build
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Error al construir la aplicación" -ForegroundColor Red
         exit 1
     }
     Write-Host "Aplicación construida exitosamente" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "Error: No se encuentra el directorio del frontend en $frontendPath" -ForegroundColor Red
     exit 1
 }
@@ -121,7 +132,8 @@ if (Test-Path $bicepFile) {
         exit 1
     }
     Write-Host "Recursos de Azure desplegados exitosamente" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "Error: No se encuentra el archivo Bicep en $bicepFile" -ForegroundColor Red
     exit 1
 }
@@ -145,26 +157,22 @@ if ($storageAccountName) {
     
     $distPath = "$frontendPath\out"
     if (Test-Path $distPath) {
-        # Usar azcopy o az storage blob upload-batch para subir archivos
-        $files = Get-ChildItem $distPath -Recurse -File
-        foreach ($file in $files) {
-            $relativePath = $file.FullName.Replace("$distPath\", '').Replace('\', '/')
-            Write-Host "   Subiendo: $relativePath" -ForegroundColor Gray
-            
-            az storage blob upload `
-                --account-name $storageAccountName `
-                --account-key $storageKey `
-                --container-name '$web' `
-                --name $relativePath `
-                --file $file.FullName `
-                --overwrite
-            
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Advertencia: Error al subir $relativePath" -ForegroundColor Yellow
-            }
+        # Usar az storage blob upload-batch para subir todo el directorio de una vez
+        # Es mucho más rápido y maneja las rutas relativas correctamente
+        az storage blob upload-batch `
+            --account-name $storageAccountName `
+            --account-key $storageKey `
+            --destination '$web' `
+            --source $distPath `
+            --overwrite true
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Error al subir los archivos del frontend" -ForegroundColor Red
+            exit 1
         }
         Write-Host "Archivos del frontend subidos exitosamente" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "Error: No se encuentra el directorio de salida 'out' en el frontend" -ForegroundColor Red
         Write-Host "   Asegúrate de que la compilación de Next.js haya generado el directorio 'out'" -ForegroundColor Yellow
         exit 1
@@ -180,7 +188,8 @@ if ($storageAccountName) {
     if ($cdnEndpoint) {
         Write-Host "URL del CDN: https://$cdnEndpoint" -ForegroundColor Cyan
     }
-} else {
+}
+else {
     Write-Host "Error: No se encontró la cuenta de almacenamiento del frontend" -ForegroundColor Red
     exit 1
 }

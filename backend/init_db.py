@@ -18,8 +18,9 @@ async def init_db():
     db_host = os.getenv("AZURE_PG_HOST", "localhost")
     db_name = os.getenv("AZURE_PG_DATABASE", "theogen")
     
-    # Create database URL
-    DATABASE_URL = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}/{db_name}"
+    # Create database URL (URL-encode password for special chars)
+    from urllib.parse import quote_plus
+    DATABASE_URL = f"postgresql+asyncpg://{db_user}:{quote_plus(db_password)}@{db_host}/{db_name}?ssl=require"
     
     logger.info(f"Initializing TheoGen Database with host: {db_host}...")
     try:

@@ -23,6 +23,10 @@ class TheoryGenerationEngine:
     async def identify_central_category(self, categories: list, network: dict) -> dict:
         """Uses GPT-5.2 to find the axle of the theory."""
         logger.info("Identifying central category using GPT-5.2...")
+        required_network_keys = {"counts", "category_centrality", "category_cooccurrence"}
+        missing = required_network_keys - set(network.keys())
+        if missing:
+            raise ValueError(f"Network payload missing required keys: {', '.join(sorted(missing))}")
         
         # Use gpt-5.2-chat (MODEL_REASONING_ADVANCED)
         response = await self.ai.reasoning_advanced(

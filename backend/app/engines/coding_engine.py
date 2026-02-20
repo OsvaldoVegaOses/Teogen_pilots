@@ -156,8 +156,15 @@ class CodingEngine:
         """
         Iterates through all fragments of an interview and codes them.
         """
-        # Ensure project node exists in Neo4j (optional optimization)
-        # await neo4j_service.create_project_node(project_id, "Project Name") 
+        # Ensure project node exists in Neo4j before syncing dependent nodes.
+        project_result = await db.execute(
+            select(Project).where(Project.id == project_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+
+        await neo4j_service.ensure_project_node(project_id, project.name)
         
         frag_result = await db.execute(
             select(Fragment).filter(Fragment.interview_id == interview_id)

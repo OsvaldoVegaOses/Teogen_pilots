@@ -1,8 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from pydantic import model_validator
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TheoGen"
+    TESTING: bool = False
     
     # Frontend URL
     FRONTEND_URL: str = ""
@@ -52,17 +53,33 @@ class Settings(BaseSettings):
     AZURE_REDIS_KEY: str = ""
     
     # External Managed
-    NEO4J_URI: str = ""
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = ""
+    NEO4J_URI: str
+    NEO4J_USER: str
+    NEO4J_PASSWORD: str
     
-    QDRANT_URL: str = ""
+    QDRANT_URL: str
     QDRANT_API_KEY: str = ""
     
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
     
+    @model_validator(mode="after")
+    def validate_required_integrations(self):
+        if self.TESTING:
+            return self
+
+        required = {
+            "NEO4J_URI": self.NEO4J_URI,
+            "NEO4J_USER": self.NEO4J_USER,
+            "NEO4J_PASSWORD": self.NEO4J_PASSWORD,
+            "QDRANT_URL": self.QDRANT_URL,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"Missing required settings: {', '.join(missing)}")
+        return self
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

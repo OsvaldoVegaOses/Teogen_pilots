@@ -1,7 +1,8 @@
 
 import httpx
 import logging
-import base64
+from urllib.parse import urlparse
+from pathlib import Path
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from ..core.settings import settings
@@ -103,52 +104,36 @@ class FoundryTranscriptionService:
     )
     async def transcribe_gpt4o_audio(self, audio_blob_url: str, language: str) -> dict:
         """
-        Fallback Method: GPT-4o Audio Model (via Chat Completions with Audio).
-        Deployment: gpt-4o-transcribe-diarize
+        Fallback Method: Azure OpenAI Audio Transcriptions API.
+        Deployment: MODEL_TRANSCRIPTION (ej. gpt-4o-transcribe-diarize)
         """
-        # Use the Azure-specific client for deployments
         client = foundry_openai.azure_client 
         if not client:
              raise RuntimeError("Foundry Azure OpenAI client not initialized")
 
         logger.info(f"Executing fallback transcription with {settings.MODEL_TRANSCRIPTION}")
 
-        # 1. Download Audio form Blob Storage
-        async with httpx.AsyncClient() as http_client:
+        # 1. Download audio from Blob Storage
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
             audio_response = await http_client.get(audio_blob_url)
             audio_response.raise_for_status()
             audio_content = audio_response.content
-            
-        b64_audio = base64.b64encode(audio_content).decode('utf-8')
 
-        # 2. Call Azure OpenAI (GPT-4o Audio)
-        # Note: This schema assumes support for multimodal input_audio.
-        # Ensure your API version supports this (e.g. 2024-10-01-preview)
-        response = await client.chat.completions.create(
-            model=settings.MODEL_TRANSCRIPTION, # "gpt-4o-transcribe-diarize"
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert transcriber. Transcribe the user's audio verbatim."
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Transcribe this interview audio."},
-                        {
-                            "type": "input_audio", 
-                            "input_audio": {
-                                "data": b64_audio,
-                                "format": "wav" 
-                            }
-                        }
-                    ]
-                }
-            ],
-            temperature=0.0
+        # 2. Use Audio Transcriptions API (not chat completions)
+        parsed = urlparse(audio_blob_url)
+        ext = Path(parsed.path).suffix.lower() or ".wav"
+        filename = f"interview{ext}"
+        language_code = (language or "es").split("-")[0]
+
+        response = await client.audio.transcriptions.create(
+            file=(filename, audio_content),
+            model=settings.MODEL_TRANSCRIPTION,
+            language=language_code,
         )
 
-        transcript_text = response.choices[0].message.content
+        transcript_text = getattr(response, "text", None) or ""
+        if not transcript_text:
+            raise RuntimeError("Fallback transcription returned empty text")
 
         return {
             "full_text": transcript_text or "",

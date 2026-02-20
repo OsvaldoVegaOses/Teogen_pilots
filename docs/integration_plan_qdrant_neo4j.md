@@ -1,77 +1,62 @@
-# Plan de Integración de Qdrant y Neo4j en TheoGen
+# Plan de Integracion de Qdrant y Neo4j en TheoGen
 
-**Última actualización:** 2026-02-17
-**Estado:** ✅ Fase 1, 2 y 3 Completadas
-**Autores:** Asistente (DeepMind) y Osvaldo
+**Ultima actualizacion:** 2026-02-20
+**Estado:** Completado en produccion para sincronizacion y teoria (pendientes frontend y pruebas con infraestructura real)
 
-Este documento detalla los pasos para integrar **búsqueda semántica (Qdrant)** y **análisis de grafos (Neo4j)** en TheoGen. El objetivo es potenciar el motor de codificación y teoría sin afectar la funcionalidad actual.
+Este documento detalla los pasos para integrar busqueda semantica (Qdrant) y analisis de grafos (Neo4j) en TheoGen.
 
-## 1. Fase 1: Servicios Base y Conexiones (✅ Completada)
+## 1. Fase 1: Servicios Base y Conexiones (Completada)
 
-Objetivo: Establecer conexiones a las bases de datos externas de forma segura y robusta.
+- [x] Configuracion en `backend/app/core/settings.py` para variables QDRANT/NEO4J.
+- [x] Servicio Qdrant (`backend/app/services/qdrant_service.py`):
+  - [x] `ensure_collection`
+  - [x] `upsert_vectors`
+  - [x] `search_similar`
+  - [x] `search_supporting_fragments` (evidencia para teoria)
+- [x] Servicio Neo4j (`backend/app/services/neo4j_service.py`):
+  - [x] `create_project_node`
+  - [x] `create_code_node`
+  - [x] `create_fragment_node`
+  - [x] `create_category_node`
+  - [x] `create_code_fragment_relation`
+  - [x] `link_code_to_category`
+  - [x] `get_project_network_metrics`
 
-- [x] **Configuración del Entorno**
-    - [x] Verificar definiciones en `backend/app/core/settings.py` (variables QDRANT/NEO4J).
-    - [x] Verificar dependencias en `backend/requirements.txt` (`qdrant-client`, `neo4j`).
-    - [x] Asegurar variables en `.env` (QDRANT_API_KEY, NEO4J_PASSWORD).
+## 2. Fase 2: Sincronizacion de Datos (Completada)
 
-- [x] **Servicio Qdrant (`services/qdrant_service.py`)**
-    - [x] Implementar clase `FoundryQdrantService`.
-    - [x] Método `initialize_collection`: Crear colección si no existe.
-    - [x] Método `upsert_vectors`: Insertar embeddings + metadatos (ProjectID, CodeID).
-    - [x] Método `search_similar`: Búsqueda por vector (kNN).
-    - [x] Manejo de errores tolerante a fallos (log warning si falla, no crash).
+- [x] `coding_engine.py` genera embeddings y sincroniza fragmentos a Qdrant.
+- [x] `coding_engine.py` asegura nodo Project en Neo4j antes de sincronizar.
+- [x] Se mantiene trazabilidad de embeddings en `Fragment.embedding_synced`.
 
-- [x] **Servicio Neo4j (`services/neo4j_service.py`)**
-    - [x] Implementar clase `FoundryGraphService`.
-    - [x] Método `create_code_node`: Crear nodo (:Code).
-    - [x] Método `create_fragment_node`: Crear nodo (:Fragment).
-    - [x] Método `create_relationship`: (:Code)-[:APPLIES_TO]->(:Fragment).
-    - [x] Manejo de errores tolerante a fallos.
+## 3. Fase 3: Capacidades de Analisis (Completada)
 
-## 2. Fase 2: Sincronización de Datos (Coding Engine) (✅ Completada)
+- [x] Endpoint semantico `POST /api/search/fragments`.
+- [x] Teoria sin placeholder:
+  - [x] `POST /api/projects/{project_id}/generate-theory` usa metricas reales de Neo4j.
+  - [x] La teoria incluye `validation.network_metrics_summary`.
+  - [x] La teoria incorpora evidencia semantica de Qdrant (`semantic_evidence_top`).
 
-Objetivo: Alimentar las bases de datos de conocimiento de forma automática y asíncrona.
+## 4. Endurecimiento Operativo (Completada)
 
-- [x] **Generación de Embeddings (Coding Engine)**
-    - [x] Modificar `coding_engine.py` para generar embeddings de fragmentos usando `FoundryOpenAI`.
-    - [x] Usar `BackgroundTasks` de FastAPI para subir vectores a Qdrant tras codificación exitosa.
-    - [x] Actualizar bandera `binding_synced=True` en Postgres.
+- [x] Startup fail-fast en `backend/app/main.py` (excepto `TESTING=true`).
+- [x] Neo4j/Qdrant requeridos en settings (con validacion de integraciones).
+- [x] Consistencia defensiva con `MERGE (p:Project ...)` para nodos dependientes.
 
-- [x] **Construcción del Grafo (Coding Engine)**
-    - [x] Usar `BackgroundTasks` para crear nodos y relaciones en Neo4j tras codificación.
-    - [x] Sincronizar Jerarquías: (:Category)-[:CONTAINS]->(:Code).
+## 5. Pruebas y Despliegue
 
-## 3. Fase 3: Nuevas Capacidades (Search & Analysis) (✅ Completada)
+- [x] Tests de integracion agregados:
+  - [x] `backend/tests/integration/test_neo4j_sync.py`
+  - [x] `backend/tests/integration/test_theory_graph_input.py`
+- [ ] Pruebas de integracion contra Neo4j/Qdrant reales en entorno dev.
+- [ ] Verificacion E2E autenticada en entorno desplegado.
 
-Objetivo: Explotar los datos para mejorar la teorización y sugerencias.
-
-- [x] **Endpoint de Búsqueda Semántica (`api/search.py`)**
-    - [x] `POST /api/search/fragments`: Recibe texto, vectoriza y consulta Qdrant.
-    - [x] Retorna fragmentos similares de otros proyectos (si aplica) o del mismo.
-
-- [ ] **Análisis de Red (Theory Engine)** (Pendiente)
-    - [ ] Integrar Neo4j en `theory_engine.py`.
-    - [ ] Calcular PageRank/Centralidad para sugerir Categoría Central automáticamente.
-    - [ ] Visualizar el grafo real en el frontend (futuro).
-
-## 4. Fase 4: Pruebas y Despliegue
-
-- [ ] **Testing**
-    - [ ] Unit tests para servicios con mocks.
-    - [ ] Integration tests con bases de datos reales (dev).
-    - [ ] Verificar tolerancia a fallos: ¿Qué pasa si Qdrant está caído? (La app debe seguir funcionando).
-
-- [ ] **Documentación**
-    - [ ] Actualizar README.md con requisitos de Qdrant/Neo4j.
-    - [ ] Documentar nuevos endpoints en OpenAPI/Swagger.
-
----
-
-## Registro de Avance
+## Registro de avance
 
 | Fecha | Tarea | Estado | Notas |
 |---|---|---|---|
-| 2026-02-17 | Implementación de Servicios | ✅ Completado | `qdrant_service.py`, `neo4j_service.py` creados. |
-| 2026-02-17 | Integración Coding Engine | ✅ Completado | Sincronización automática a Qdrant y Neo4j implementada. |
-| 2026-02-17 | Search Endpoint | ✅ Completado | Endpoint `/api/search` implementado. |
+| 2026-02-17 | Implementacion de servicios | Completado | Servicios base de Qdrant y Neo4j. |
+| 2026-02-17 | Integracion Coding Engine | Completado | Sincronizacion automatica de fragmentos/codigos. |
+| 2026-02-17 | Search endpoint | Completado | Endpoint `/api/search/fragments`. |
+| 2026-02-20 | Endurecimiento operativo | Completado | Startup checks + settings requeridos. |
+| 2026-02-20 | Teoria con grafo real y Qdrant | Completado | Sin placeholder y con evidencia semantica. |
+| 2026-02-20 | Tests de integracion | Completado | Nuevos tests en `backend/tests/integration/`. |

@@ -1,3 +1,4 @@
+from urllib.parse import quote_plus
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from .core.settings import settings
@@ -19,8 +20,9 @@ def get_engine():
             "Set AZURE_PG_HOST, AZURE_PG_USER, AZURE_PG_PASSWORD in your .env file."
         )
 
+    encoded_password = quote_plus(settings.AZURE_PG_PASSWORD)
     DATABASE_URL = (
-        f"postgresql+asyncpg://{settings.AZURE_PG_USER}:{settings.AZURE_PG_PASSWORD}"
+        f"postgresql+asyncpg://{settings.AZURE_PG_USER}:{encoded_password}"
         f"@{settings.AZURE_PG_HOST}:5432/{settings.AZURE_PG_DATABASE}"
         f"?ssl=require"
     )
