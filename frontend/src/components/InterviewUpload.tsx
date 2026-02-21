@@ -86,9 +86,14 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-zinc-500 mb-1">Archivo de Audio o Transcripción</label>
+                    <label htmlFor={`interview-file-${projectId}`} className="block text-sm font-medium text-zinc-500 mb-1">Archivo de Audio o Transcripción</label>
                     <input
+                        id={`interview-file-${projectId}`}
+                        name="file"
                         type="file"
+                        accept="audio/*,text/plain,application/json"
+                        title="Selecciona un archivo de audio o una transcripción"
+                        aria-label="Archivo de audio o transcripción"
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                         className="block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
                     />

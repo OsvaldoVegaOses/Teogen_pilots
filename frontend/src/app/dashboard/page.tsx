@@ -265,8 +265,7 @@ export default function Dashboard() {
                                                     </div>
                                                     <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800">
                                                         <div
-                                                            className="h-full rounded-full bg-indigo-600 transition-all duration-1000 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
-                                                            style={{ width: `${project.saturation_score * 100}%` }}
+                                                            className={`[--progress-width:${Math.round(project.saturation_score * 100)}%] progress-bar h-full rounded-full bg-indigo-600 transition-all duration-1000 shadow-[0_0_10px_rgba(79,70,229,0.5)]`}
                                                         />
                                                     </div>
                                                 </div>
