@@ -111,13 +111,14 @@ class FoundryQdrantService:
 
         collection_name = self._get_collection_name(project_id)
         try:
-            results = await self.client.search(
+            results = await self.client.query_points(
                 collection_name=collection_name,
-                query_vector=vector,
+                query=vector,
                 limit=limit,
-                score_threshold=score_threshold
+                score_threshold=score_threshold,
+                with_payload=True,
             )
-            return results
+            return results.points
         except UnexpectedResponse as e:
             if "Not found" in str(e):
                 logger.warning(f"Collection {collection_name} not found during search.")
