@@ -36,7 +36,9 @@ class ModelRouterEngine:
                 **kwargs,
             )
 
-            result_content = response.choices[0].message.content
+            result_content = response.choices[0].message.content if response.choices else None
+            if not result_content:
+                raise RuntimeError(f"Model router returned empty choices for task_type='{task_type}'.")
 
             return {
                 "result": result_content,

@@ -84,6 +84,8 @@ class FoundryOpenAIService:
             temperature=temperature,
             **kwargs,
         )
+        if not response.choices:
+            raise RuntimeError(f"Model '{model}' returned empty choices (possible rate-limit or content filter).")
         return response.choices[0].message.content
 
 foundry_openai = FoundryOpenAIService()
