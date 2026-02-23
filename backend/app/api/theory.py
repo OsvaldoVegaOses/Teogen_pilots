@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 from uuid import UUID
 from sqlalchemy import select, func
 import asyncio
 import logging
 import time
+import json as _json
 
 from ..database import get_db, get_session_local
 
@@ -25,11 +26,76 @@ from datetime import datetime
 
 router = APIRouter(prefix="/projects", tags=["Theory"])
 
-# ── In-memory task store (single-replica safe) ──────────────────────────────
-# task_id -> {"status": pending|running|completed|failed, "result": ..., "error": ...}
-_theory_tasks: Dict[str, Dict[str, Any]] = {}
+# ── Redis task store (with in-memory fallback) ───────────────────────────────
+_TASK_TTL = 86400        # 24 h
+_TASK_PREFIX = "theory_task:"
+_redis_client = None
+_theory_tasks: Dict[str, Dict[str, Any]] = {}   # always-available memory store
 
-# Keeps strong references to background tasks so GC does not cancel them.
+
+async def _get_redis():
+    """Return a connected Redis client or None if unavailable."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        from ..core.settings import settings
+        if not (settings.AZURE_REDIS_HOST and settings.AZURE_REDIS_KEY):
+            return None
+        import redis.asyncio as aioredis
+        _redis_client = aioredis.Redis(
+            host=settings.AZURE_REDIS_HOST,
+            port=6380,
+            password=settings.AZURE_REDIS_KEY,
+            ssl=True,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        await _redis_client.ping()
+        logger.info("Redis task store connected: %s", settings.AZURE_REDIS_HOST)
+    except Exception as e:
+        logger.warning("Redis task store unavailable, using memory only: %s", e)
+        _redis_client = None
+    return _redis_client
+
+
+async def _persist_task(task_id: str) -> None:
+    """Write current in-memory task state to Redis (best-effort)."""
+    task = _theory_tasks.get(task_id)
+    if not task:
+        return
+    redis = await _get_redis()
+    if redis:
+        try:
+            await redis.setex(
+                f"{_TASK_PREFIX}{task_id}",
+                _TASK_TTL,
+                _json.dumps(task, default=str),
+            )
+        except Exception as e:
+            logger.warning("Redis persist failed for task %s: %s", task_id, e)
+
+
+async def _restore_task(task_id: str) -> Optional[Dict[str, Any]]:
+    """Restore a task from Redis if not in memory (handles restarts)."""
+    if task_id in _theory_tasks:
+        return _theory_tasks[task_id]
+    redis = await _get_redis()
+    if not redis:
+        return None
+    try:
+        raw = await redis.get(f"{_TASK_PREFIX}{task_id}")
+        if raw:
+            task = _json.loads(raw)
+            _theory_tasks[task_id] = task
+            logger.info("Restored task %s from Redis", task_id)
+            return task
+    except Exception as e:
+        logger.warning("Redis restore failed for task %s: %s", task_id, e)
+    return None
+
+# Keeps strong references to bg tasks so GC does not cancel them.
 _background_tasks: Set[asyncio.Task] = set()
 
 # ── Background worker ───────────────────────────────────────────────────────
@@ -38,6 +104,7 @@ async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, 
     wall_start = time.perf_counter()
     logger.info("[theory] task %s STARTED for project %s", task_id, project_id)
     _theory_tasks[task_id]["status"] = "running"
+    await _persist_task(task_id)
     try:
         session_local = get_session_local()
         async with session_local() as db:
@@ -46,6 +113,7 @@ async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, 
         logger.exception("[theory] task %s CRASHED: %s", task_id, e)
         _theory_tasks[task_id]["status"] = "failed"
         _theory_tasks[task_id]["error"] = str(e)
+        await _persist_task(task_id)
     finally:
         elapsed = time.perf_counter() - wall_start
         logger.info("[theory] task %s FINISHED status=%s total_elapsed=%.1fs", task_id, _theory_tasks.get(task_id, {}).get("status"), elapsed)
@@ -90,7 +158,7 @@ async def get_theory_task_status(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Poll the status of a running theory generation task."""
-    task = _theory_tasks.get(task_id)
+    task = _theory_tasks.get(task_id) or await _restore_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
@@ -362,6 +430,7 @@ async def _theory_pipeline(
 
         # Serialize result for the polling endpoint
         _theory_tasks[task_id]["status"] = "completed"
+        await _persist_task(task_id)
         total_pipeline = time.perf_counter() - pipeline_start
         logger.info("[theory][%s] step=COMPLETED theory_id=%s total_pipeline=%.1fs", task_id, new_theory.id, total_pipeline)
         _theory_tasks[task_id]["result"] = {

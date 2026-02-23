@@ -132,6 +132,77 @@ class FoundryNeo4jService:
             "category_id": str(category_id)
         })
 
+    async def batch_sync_interview(
+        self,
+        project_id: UUID,
+        fragments: list[tuple[UUID, str]],          # [(fragment_id, text), ...]
+        codes_cache: dict,                           # {label: Code object}
+        fragment_code_pairs: list[tuple[UUID, UUID]], # [(fragment_id, code_id), ...]
+    ):
+        """
+        Syncs an entire interview to Neo4j in 3 UNWIND queries instead of
+        O(fragments × codes) individual round-trips.
+        """
+        if not self.enabled or not self.driver:
+            return
+
+        pid = str(project_id)
+        async with self.driver.session() as session:
+            # 1. Batch fragment nodes
+            if fragments:
+                await session.run(
+                    """
+                    UNWIND $frags AS f
+                    MERGE (proj:Project {id: $pid})
+                    MERGE (fr:Fragment {id: f.id})
+                    SET fr.text_snippet = f.snippet, fr.project_id = $pid
+                    MERGE (proj)-[:HAS_FRAGMENT]->(fr)
+                    """,
+                    {
+                        "pid": pid,
+                        "frags": [
+                            {"id": str(fid), "snippet": text[:50]}
+                            for fid, text in fragments
+                        ],
+                    },
+                )
+
+            # 2. Batch code nodes (whole project cache — idempotent MERGE)
+            if codes_cache:
+                await session.run(
+                    """
+                    UNWIND $codes AS c
+                    MERGE (proj:Project {id: $pid})
+                    MERGE (co:Code {id: c.id})
+                    SET co.label = c.label, co.project_id = $pid
+                    MERGE (proj)-[:HAS_CODE]->(co)
+                    """,
+                    {
+                        "pid": pid,
+                        "codes": [
+                            {"id": str(obj.id), "label": label}
+                            for label, obj in codes_cache.items()
+                        ],
+                    },
+                )
+
+            # 3. Batch code→fragment relations
+            if fragment_code_pairs:
+                await session.run(
+                    """
+                    UNWIND $pairs AS p
+                    MATCH (c:Code {id: p.code_id})
+                    MATCH (f:Fragment {id: p.frag_id})
+                    MERGE (c)-[:APPLIES_TO]->(f)
+                    """,
+                    {
+                        "pairs": [
+                            {"code_id": str(cid), "frag_id": str(fid)}
+                            for fid, cid in fragment_code_pairs
+                        ]
+                    },
+                )
+
     async def ensure_project_node(self, project_id: UUID, name: str = "Unnamed Project"):
         """Ensures a project node exists before syncing related entities."""
         if not self.enabled:
