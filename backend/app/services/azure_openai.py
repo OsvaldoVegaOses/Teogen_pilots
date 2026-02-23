@@ -1,4 +1,4 @@
-from openai import AsyncOpenAI, AsyncAzureOpenAI
+from openai import AsyncAzureOpenAI
 from ..core.settings import settings
 import logging
 
@@ -12,11 +12,10 @@ class FoundryOpenAIService:
     """
 
     def __init__(self):
-        self._client = None
         self._azure_client = None
 
     def _ensure_clients(self):
-        if self._client and self._azure_client:
+        if self._azure_client:
             return
 
         if not settings.AZURE_OPENAI_API_KEY or not settings.AZURE_OPENAI_ENDPOINT:
@@ -25,13 +24,6 @@ class FoundryOpenAIService:
                 "TheoGen does not support local/mock AI mode."
             )
 
-        # ✅ Async OpenAI client using the /v1/ endpoint
-        self._client = AsyncOpenAI(
-            api_key=settings.AZURE_OPENAI_API_KEY,
-            base_url=f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/v1/",
-        )
-
-        # ✅ Async AzureOpenAI client for features like OIDC/Managed Identity
         self._azure_client = AsyncAzureOpenAI(
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
@@ -52,8 +44,8 @@ class FoundryOpenAIService:
         return self._azure_client
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Generates 3072-dim embeddings using text-embedding-3-large."""
-        response = await self._azure_client.embeddings.create(
+        """Generates embeddings using text-embedding-3-large."""
+        response = await self.azure_client.embeddings.create(
             model=settings.MODEL_EMBEDDING,
             input=texts,
         )
