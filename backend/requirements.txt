@@ -29,5 +29,6 @@ pandas
 numpy
 tenacity
 reportlab
+json-repair
 pytest
 pytest-asyncio

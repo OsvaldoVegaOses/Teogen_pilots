@@ -31,11 +31,17 @@ class TheoryGenerationEngine:
         # NOTE: response_format=json_object NOT sent — DeepSeek-V3 in Azure Foundry
         # returns empty choices when JSON mode is requested but not supported.
         # safe_json_loads extracts JSON from free-text response.
+        #
+        # max_completion_tokens overridden to LARGE because this call evaluates
+        # up to THEORY_MAX_CATS_FOR_LLM (50) categories, each with scores + justification.
+        # 50 cats × ~200 tokens ≈ 10K+ output tokens; default 8192 would truncate the JSON.
+        from ..core.settings import settings as _s
         response = await self.ai.reasoning_advanced(
             messages=[
                 {"role": "system", "content": CENTRAL_CATEGORY_SYSTEM_PROMPT},
                 {"role": "user", "content": get_central_category_user_prompt(categories, network)}
-            ]
+            ],
+            max_completion_tokens=_s.THEORY_LLM_MAX_OUTPUT_TOKENS_LARGE,
         )
         return safe_json_loads(response)
 

@@ -100,7 +100,10 @@ class Settings(BaseSettings):
     THEORY_MAX_EVIDENCE_FRAGS: int = 2       # max semantic evidence fragments per category
     THEORY_MAX_FRAG_CHARS: int = 400         # max chars per fragment text (≈100 tokens each)
     THEORY_MAX_NETWORK_TOP: int = 30         # top-N items from centrality/cooccurrence lists
-    THEORY_LLM_MAX_OUTPUT_TOKENS: int = 4096 # output token cap per call (avoids burning 100K output window)
+    THEORY_LLM_MAX_OUTPUT_TOKENS: int = 8192 # default output token cap per call
+    # Large output cap for verbose calls (identify_central_category evaluates many cats with justifications).
+    # 50 cats × ~200 tokens each + overhead = ~12K tokens. 16K gives safe headroom.
+    THEORY_LLM_MAX_OUTPUT_TOKENS_LARGE: int = 16384
 
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""
