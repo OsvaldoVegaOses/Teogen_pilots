@@ -6,8 +6,17 @@ logger = logging.getLogger(__name__)
 
 # Models that only support temperature=1 (o-series / reasoning).
 # Temperature param is skipped for these; the API uses its default (1).
-# Unknown reasoning models are auto-detected from 400 'unsupported_value' errors at runtime.
+# Auto-detected at runtime from 400 'unsupported_value' errors.
 _NO_TEMPERATURE_MODELS: set[str] = {
+    "gpt-5.2-chat",
+    "o1", "o1-mini", "o1-preview",
+    "o3", "o3-mini",
+    "o4-mini",
+}
+
+# Models that use 'max_completion_tokens' instead of 'max_tokens'.
+# Auto-detected at runtime from 400 'unsupported_parameter' errors.
+_USE_MAX_COMPLETION_TOKENS_MODELS: set[str] = {
     "gpt-5.2-chat",
     "o1", "o1-mini", "o1-preview",
     "o3", "o3-mini",
@@ -94,9 +103,13 @@ class FoundryOpenAIService:
         # Strip params that certain models never accept
         kwargs.pop("response_format", None)
         # Cap output tokens — avoids burning through TPM with the full 100K output window.
-        # Callers can still override by passing max_tokens= explicitly.
-        if "max_tokens" not in kwargs:
-            kwargs["max_tokens"] = settings.THEORY_LLM_MAX_OUTPUT_TOKENS
+        # Reasoning models (gpt-5.2, o-series) use 'max_completion_tokens'; others use 'max_tokens'.
+        # We normalise here: if caller passed 'max_tokens', rename it for reasoning models.
+        token_limit = kwargs.pop("max_tokens", None) or settings.THEORY_LLM_MAX_OUTPUT_TOKENS
+        if model in _USE_MAX_COMPLETION_TOKENS_MODELS:
+            kwargs.setdefault("max_completion_tokens", token_limit)
+        else:
+            kwargs.setdefault("max_tokens", token_limit)
         if model not in _NO_TEMPERATURE_MODELS:
             kwargs["temperature"] = temperature
 
@@ -113,13 +126,22 @@ class FoundryOpenAIService:
                 # Auto-detect reasoning models that reject custom temperature (400 unsupported_value)
                 if "temperature" in err_str and "unsupported_value" in err_str and "temperature" in kwargs:
                     logger.warning(
-                        "Model '%s' rejected temperature param — stripping and retrying. "
-                        "Add to _NO_TEMPERATURE_MODELS to avoid future round-trip.",
+                        "Model '%s' rejected temperature param — stripping and retrying.",
                         model,
                     )
                     kwargs.pop("temperature")
                     _NO_TEMPERATURE_MODELS.add(model)
-                    continue  # retry (temperature issue now fixed for this and future calls)
+                    continue
+                # Auto-detect models that use max_completion_tokens instead of max_tokens
+                if "max_tokens" in err_str and "unsupported_parameter" in err_str and "max_tokens" in kwargs:
+                    logger.warning(
+                        "Model '%s' rejected max_tokens — switching to max_completion_tokens and retrying.",
+                        model,
+                    )
+                    limit = kwargs.pop("max_tokens")
+                    kwargs["max_completion_tokens"] = limit
+                    _USE_MAX_COMPLETION_TOKENS_MODELS.add(model)
+                    continue
                 raise
             else:
                 if response.choices:
