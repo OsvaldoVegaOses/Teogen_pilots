@@ -1,7 +1,7 @@
 "use client";
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InterviewUpload from "@/components/InterviewUpload";
@@ -35,6 +35,8 @@ export default function Dashboard() {
     const [theoryDone, setTheoryDone] = useState(false);
     const [theoryFailed, setTheoryFailed] = useState(false);
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+    const [logLines, setLogLines] = useState<string[]>([]);
+    const prevStepRef = useRef<string>("");
 
     // Fetch projects from backend
     useEffect(() => {
@@ -158,15 +160,18 @@ export default function Dashboard() {
     }
 
     const STEP_DISPLAY: Record<string, string> = {
-        coding:       "Codificando fragmentos de entrevistas...",
-        coding_done:  "Codificación completada",
-        embeddings:   "Generando embeddings semánticos...",
-        neo4j:        "Sincronizando grafo de conocimiento...",
-        theory_engine:"Construyendo teoría fundada...",
-        categories:   "Analizando categorías emergentes...",
-        saturation:   "Verificando saturación teórica...",
-        saving:       "Guardando teoría en base de datos...",
-        completed:    "Teoría completada",
+        queued:        "En cola...",
+        pipeline_start:"Iniciando pipeline...",
+        coding:        "Codificando fragmentos de entrevistas...",
+        coding_done:   "Codificación completada",
+        embeddings:    "Generando embeddings semánticos...",
+        neo4j:         "Sincronizando grafo de conocimiento...",
+        theory_engine: "Construyendo teoría fundada...",
+        categories:    "Analizando categorías emergentes...",
+        saturation:    "Verificando saturación teórica...",
+        saving:        "Guardando teoría en base de datos...",
+        completed:     "Teoría completada",
+        failed:        "Pipeline terminado con error",
     };
 
     function handleExportTheory() {
@@ -189,6 +194,8 @@ export default function Dashboard() {
         setTaskProgress(0);
         setTaskStep("");
         setTheoryMessage("");
+        setLogLines([]);
+        prevStepRef.current = "";
 
         try {
             const { apiClient } = await import("@/lib/api");
@@ -238,7 +245,14 @@ export default function Dashboard() {
                     nextDelayMs = Math.max(2000, (taskData.next_poll_seconds || 5) * 1000);
 
                     if (typeof taskData.progress === "number") setTaskProgress(taskData.progress);
-                    if (taskData.step) setTaskStep(taskData.step);
+                    if (taskData.step) {
+                        setTaskStep(taskData.step);
+                        if (taskData.step !== prevStepRef.current) {
+                            prevStepRef.current = taskData.step;
+                            const ts = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                            setLogLines(prev => [...prev.slice(-30), `${ts}  ${STEP_DISPLAY[taskData.step] || taskData.step}`]);
+                        }
+                    }
 
                     if (taskData.status === "completed") {
                         setActiveTheory(taskData.result);
@@ -249,8 +263,11 @@ export default function Dashboard() {
                         return;
                     }
                     if (taskData.status === "failed") {
+                        const errMsg = taskData.error || "La generación falló.";
                         setTheoryFailed(true);
-                        setTheoryMessage(taskData.error || "La generación falló.");
+                        setTheoryMessage(errMsg);
+                        const ts = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                        setLogLines(prev => [...prev.slice(-30), `${ts}  ERROR: ${errMsg}`]);
                         setGeneratingTheory(false);
                         localStorage.removeItem(`theory_task_${selectedProjectId}`);
                         return;
@@ -470,6 +487,13 @@ export default function Dashboard() {
                                                             task: {currentTaskId}
                                                         </p>
                                                     )}
+                                                    {logLines.length > 0 && (
+                                                        <div className="mt-2 bg-black/30 rounded-lg p-2 max-h-20 overflow-y-auto">
+                                                            {logLines.slice(-5).map((line, i) => (
+                                                                <p key={i} className="text-xs font-mono text-white/55 leading-relaxed">{line}</p>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -505,9 +529,14 @@ export default function Dashboard() {
                                             {/* Failed */}
                                             {theoryFailed && (
                                                 <div>
-                                                    <p className="text-white/80 text-sm mb-4">{theoryMessage || "La generación falló."}</p>
+                                                    <p className="text-white font-semibold text-sm mb-2">La generación falló.</p>
+                                                    {theoryMessage && (
+                                                        <div className="mb-3 bg-black/30 rounded-lg p-2 max-h-28 overflow-y-auto">
+                                                            <p className="text-xs font-mono text-red-200 break-all leading-relaxed whitespace-pre-wrap">{theoryMessage}</p>
+                                                        </div>
+                                                    )}
                                                     <button
-                                                        onClick={() => { setTheoryFailed(false); setTheoryMessage(""); setTaskProgress(null); setTaskStep(""); handleGenerateTheory(); }}
+                                                        onClick={() => { setTheoryFailed(false); setTheoryMessage(""); setTaskProgress(null); setTaskStep(""); setLogLines([]); handleGenerateTheory(); }}
                                                         className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
                                                     >
                                                         Reintentar
