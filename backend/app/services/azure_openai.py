@@ -41,7 +41,10 @@ class FoundryOpenAIService:
     @property
     def client(self):
         self._ensure_clients()
-        return self._client
+        # Use AsyncAzureOpenAI — routes to /openai/deployments/{model}/
+        # which matches the portal URI for all AIServices deployments.
+        # AsyncOpenAI with /openai/v1/ caused empty choices on DeepSeek.
+        return self._azure_client
 
     @property
     def azure_client(self):
@@ -50,7 +53,7 @@ class FoundryOpenAIService:
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generates 3072-dim embeddings using text-embedding-3-large."""
-        response = await self.client.embeddings.create(
+        response = await self._azure_client.embeddings.create(
             model=settings.MODEL_EMBEDDING,
             input=texts,
         )

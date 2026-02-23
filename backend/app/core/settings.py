@@ -31,13 +31,15 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str = "2024-05-01-preview" 
     
     # Model Deployments (Exact names from your Foundry Portal)
-    MODEL_REASONING_ADVANCED: str = "DeepSeek-V3.2-Speciale"
-    MODEL_REASONING_FAST: str = "DeepSeek-V3.2-Speciale"  # Was model-router; changed to avoid Claude thinking.signature error
-    MODEL_REASONING_EFFICIENT: str = "DeepSeek-V3.2-Speciale"  # Was model-router; same fix
-    MODEL_CHAT: str = ""
+    # gpt-5.2-chat: 4250 RPM / 425K TPM — primary reasoning model
+    # DeepSeek-V3.2-Speciale: 500 RPM — returns empty choices via /v1/ endpoint; kept for direct use only
+    MODEL_REASONING_ADVANCED: str = "gpt-5.2-chat"
+    MODEL_REASONING_FAST: str = "gpt-5.2-chat"
+    MODEL_REASONING_EFFICIENT: str = "gpt-5.2-chat"
+    MODEL_CHAT: str = "gpt-5.2-chat"
     MODEL_EMBEDDING: str = "text-embedding-3-large"
     MODEL_TRANSCRIPTION: str = "gpt-4o-transcribe-diarize"
-    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"  # Fallback for claude_analysis(); avoids Claude thinking.signature issue
+    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"  # Fallback para claude_analysis()
     MODEL_ROUTER: str = "model-router"
     
     # Advanced Options (Models identified in your portal)
