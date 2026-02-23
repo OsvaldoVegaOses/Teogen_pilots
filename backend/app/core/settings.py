@@ -92,7 +92,16 @@ class Settings(BaseSettings):
     THEORY_INTERVIEW_CONCURRENCY: int = 3
     THEORY_STATUS_POLL_HINT_SECONDS: int = 5
     THEORY_TASK_LOCK_TTL_SECONDS: int = 1800
-    
+
+    # LLM context-budget controls — prevents 400 context_length_exceeded on large projects.
+    # gpt-5.2-chat: 272K input limit / 100K output window / 425K TPM.
+    # 335K input tokens was reached by passing ALL categories + raw evidence fragments.
+    THEORY_MAX_CATS_FOR_LLM: int = 50        # max categories sent to identify_central_category (sorted by centrality)
+    THEORY_MAX_EVIDENCE_FRAGS: int = 2       # max semantic evidence fragments per category
+    THEORY_MAX_FRAG_CHARS: int = 400         # max chars per fragment text (≈100 tokens each)
+    THEORY_MAX_NETWORK_TOP: int = 30         # top-N items from centrality/cooccurrence lists
+    THEORY_LLM_MAX_OUTPUT_TOKENS: int = 4096 # output token cap per call (avoids burning 100K output window)
+
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""

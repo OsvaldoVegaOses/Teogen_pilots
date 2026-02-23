@@ -93,6 +93,10 @@ class FoundryOpenAIService:
         import asyncio
         # Strip params that certain models never accept
         kwargs.pop("response_format", None)
+        # Cap output tokens — avoids burning through TPM with the full 100K output window.
+        # Callers can still override by passing max_tokens= explicitly.
+        if "max_tokens" not in kwargs:
+            kwargs["max_tokens"] = settings.THEORY_LLM_MAX_OUTPUT_TOKENS
         if model not in _NO_TEMPERATURE_MODELS:
             kwargs["temperature"] = temperature
 

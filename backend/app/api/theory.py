@@ -204,6 +204,47 @@ async def _mark_step(task_id: str, step: str, progress: int) -> None:
     await _set_task_state(task_id, step=step, progress=progress)
 
 
+def _slim_cats_for_llm(cats_data: list, network_metrics: dict) -> list:
+    """Return a token-safe slice of cats_data, sorted by network centrality.
+
+    - Caps to THEORY_MAX_CATS_FOR_LLM categories (most central first).
+    - Caps evidence fragments per category and truncates fragment text.
+    - Does NOT mutate the original list.
+    """
+    centrality_rank: dict[str, int] = {
+        item.get("category_id", ""): idx
+        for idx, item in enumerate(network_metrics.get("category_centrality", []))
+    }
+    sorted_cats = sorted(cats_data, key=lambda c: centrality_rank.get(c["id"], 9999))
+    result = []
+    for cat in sorted_cats[:settings.THEORY_MAX_CATS_FOR_LLM]:
+        frags_slimmed = []
+        for frag in cat.get("semantic_evidence", [])[:settings.THEORY_MAX_EVIDENCE_FRAGS]:
+            if isinstance(frag, dict) and "text" in frag:
+                frag = {**frag, "text": frag["text"][:settings.THEORY_MAX_FRAG_CHARS]}
+            frags_slimmed.append(frag)
+        result.append({**cat, "semantic_evidence": frags_slimmed})
+    return result
+
+
+def _slim_network_for_llm(network_metrics: dict) -> dict:
+    """Return network_metrics with list sizes capped to THEORY_MAX_NETWORK_TOP."""
+    top_n = settings.THEORY_MAX_NETWORK_TOP
+    return {
+        "counts": network_metrics.get("counts", {}),
+        "category_centrality": network_metrics.get("category_centrality", [])[:top_n],
+        "category_cooccurrence": network_metrics.get("category_cooccurrence", [])[:top_n],
+    }
+
+
+def _cats_no_evidence(cats_data: list) -> list:
+    """Strip semantic_evidence for the Straussian build call (evidence already consumed in step 1)."""
+    return [
+        {"id": c["id"], "name": c["name"], "description": c.get("description", "")}
+        for c in cats_data
+    ]
+
+
 async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, request: TheoryGenerateRequest):
     wall_start = time.perf_counter()
     logger.info("[theory] task %s STARTED for project %s", task_id, project_id)
@@ -543,12 +584,22 @@ async def _theory_pipeline(
             cat["semantic_evidence"] = evidence_by_category.get(cat["id"], [])
 
         await _mark_step(task_id, "identify_central_category", 80)
-        central_cat_data = await theory_engine.identify_central_category(cats_data, network_metrics)
+        cats_slim = _slim_cats_for_llm(cats_data, network_metrics)
+        network_slim = _slim_network_for_llm(network_metrics)
+        logger.info(
+            "[theory][%s] context-slim: cats %d→%d evidence_frags<=%d frag_chars<=%d network_top=%d",
+            task_id, len(cats_data), len(cats_slim),
+            settings.THEORY_MAX_EVIDENCE_FRAGS, settings.THEORY_MAX_FRAG_CHARS,
+            settings.THEORY_MAX_NETWORK_TOP,
+        )
+        central_cat_data = await theory_engine.identify_central_category(cats_slim, network_slim)
 
         await _mark_step(task_id, "build_straussian_paradigm", 87)
+        # Pass cats without evidence — evidence was already used in step 1 (identify_central_category).
+        # This avoids re-sending thousands of tokens of raw interview text.
         paradigm = await theory_engine.build_straussian_paradigm(
             central_cat_data["selected_central_category"],
-            cats_data,
+            _cats_no_evidence(cats_slim),
         )
 
         await _mark_step(task_id, "analyze_saturation_and_gaps", 93)
