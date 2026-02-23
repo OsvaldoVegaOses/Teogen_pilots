@@ -12,8 +12,26 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
     const [isInitialized, setIsInitialized] = useState(false);
     const initStarted = useRef(false);
+    const isBrowser = typeof window !== "undefined";
+    const currentPath = isBrowser ? window.location.pathname : "/";
+    const isAuthArea =
+        currentPath.startsWith("/dashboard") ||
+        currentPath.startsWith("/login") ||
+        currentPath.startsWith("/signup");
+
+    const msalConfigured = Boolean(
+        process.env.NEXT_PUBLIC_AZURE_AD_CLIENT_ID &&
+        process.env.NEXT_PUBLIC_AZURE_AD_TENANT_ID
+    );
 
     useEffect(() => {
+        // If MSAL env vars are missing, avoid crashing the whole app.
+        // Landing page can still render; auth area gets explicit message below.
+        if (!msalConfigured) {
+            setIsInitialized(true);
+            return;
+        }
+
         if (initStarted.current) return;
         initStarted.current = true;
 
@@ -68,6 +86,29 @@ export function Providers({ children }: ProvidersProps) {
                 </div>
             </div>
         );
+    }
+
+    if (!msalConfigured) {
+        if (isAuthArea) {
+            return (
+                <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950 px-6">
+                    <div className="max-w-xl rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-800 dark:bg-red-900/20">
+                        <h2 className="text-lg font-bold text-red-700 dark:text-red-300 mb-2">
+                            Configuración de autenticación incompleta
+                        </h2>
+                        <p className="text-sm text-red-700/90 dark:text-red-300/90">
+                            Faltan variables de entorno públicas de MSAL en el frontend desplegado:
+                            <span className="font-mono"> NEXT_PUBLIC_AZURE_AD_CLIENT_ID </span>
+                            y/o
+                            <span className="font-mono"> NEXT_PUBLIC_AZURE_AD_TENANT_ID</span>.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        // Landing/public pages can render even without MSAL.
+        return <>{children}</>;
     }
 
     return (
