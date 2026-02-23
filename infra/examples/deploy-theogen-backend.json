@@ -1,0 +1,210 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "15675407621459722486"
+    }
+  },
+  "parameters": {
+    "managedEnvironmentId": {
+      "type": "string"
+    },
+    "keyVaultId": {
+      "type": "string"
+    },
+    "image": {
+      "type": "string",
+      "defaultValue": "ca39bdb671caacr.azurecr.io/theogen-backend:latest"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "theogenBackendApp",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "containerAppName": {
+            "value": "theogen-backend"
+          },
+          "managedEnvironmentId": {
+            "value": "[parameters('managedEnvironmentId')]"
+          },
+          "image": {
+            "value": "[parameters('image')]"
+          },
+          "keyVaultSecrets": {
+            "value": [
+              {
+                "name": "AZURE_OPENAI_KEY",
+                "keyVaultSecretId": "[format('{0}/secrets/azure-openai-api-key', parameters('keyVaultId'))]"
+              },
+              {
+                "name": "AZURE_PG_PASSWORD",
+                "keyVaultSecretId": "[format('{0}/secrets/azure-pg-password', parameters('keyVaultId'))]"
+              },
+              {
+                "name": "NEO4J_PASSWORD",
+                "keyVaultSecretId": "[format('{0}/secrets/neo4j-password', parameters('keyVaultId'))]"
+              },
+              {
+                "name": "QDRANT_API_KEY",
+                "keyVaultSecretId": "[format('{0}/secrets/qdrant-api-key', parameters('keyVaultId'))]"
+              }
+            ]
+          },
+          "registries": {
+            "value": [
+              {
+                "server": "ca39bdb671caacr.azurecr.io",
+                "username": "",
+                "passwordSecretRef": ""
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "17627216840256560634"
+            }
+          },
+          "parameters": {
+            "containerAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Módulo para crear o actualizar un Azure Container App con identidad gestionada y referencias a secretos en Key Vault"
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "managedEnvironmentId": {
+              "type": "string"
+            },
+            "image": {
+              "type": "string"
+            },
+            "cpu": {
+              "type": "string",
+              "defaultValue": "0.5"
+            },
+            "memory": {
+              "type": "string",
+              "defaultValue": "1Gi"
+            },
+            "keyVaultSecrets": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Array de objetos { name: string, keyVaultSecretId: string }"
+              }
+            },
+            "registries": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Array de registry credentials { server: string, username: string, password: string }"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2025-01-01",
+              "name": "[parameters('containerAppName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('managedEnvironmentId')]",
+                "configuration": {
+                  "copy": [
+                    {
+                      "name": "secrets",
+                      "count": "[length(parameters('keyVaultSecrets'))]",
+                      "input": {
+                        "name": "[parameters('keyVaultSecrets')[copyIndex('secrets')].name]",
+                        "valueFrom": {
+                          "keyVaultSecretId": "[parameters('keyVaultSecrets')[copyIndex('secrets')].keyVaultSecretId]"
+                        }
+                      }
+                    },
+                    {
+                      "name": "registries",
+                      "count": "[length(parameters('registries'))]",
+                      "input": {
+                        "server": "[parameters('registries')[copyIndex('registries')].server]",
+                        "username": "[parameters('registries')[copyIndex('registries')].username]",
+                        "passwordSecretRef": "[parameters('registries')[copyIndex('registries')].passwordSecretRef]"
+                      }
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "copy": [
+                        {
+                          "name": "env",
+                          "count": "[length(parameters('keyVaultSecrets'))]",
+                          "input": {
+                            "name": "[parameters('keyVaultSecrets')[copyIndex('env')].name]",
+                            "secretRef": "[parameters('keyVaultSecrets')[copyIndex('env')].name]"
+                          }
+                        }
+                      ],
+                      "name": "[parameters('containerAppName')]",
+                      "image": "[parameters('image')]",
+                      "resources": {
+                        "cpu": "[parameters('cpu')]",
+                        "memory": "[parameters('memory')]"
+                      }
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 3
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2025-01-01', 'full').identity.principalId]"
+            },
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName')), '2025-01-01').configuration.ingress.fqdn]"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "backendPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'theogenBackendApp'), '2025-04-01').outputs.principalId.value]"
+    },
+    "backendFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'theogenBackendApp'), '2025-04-01').outputs.fqdn.value]"
+    }
+  }
+}

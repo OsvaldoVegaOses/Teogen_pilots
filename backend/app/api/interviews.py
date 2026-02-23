@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
@@ -39,7 +39,7 @@ ALLOWED_MIME_TYPES = {
 async def upload_interview(
     project_id: UUID,
     background_tasks: BackgroundTasks,
-    participant_pseudonym: Optional[str] = None,
+    participant_pseudonym: Optional[str] = Form(None),
     file: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -84,21 +84,36 @@ async def upload_interview(
     # Stream upload to Azure without loading entirely into memory
     # Security: Content-Length check above prevents initiating transfer for declared large files.
     # UploadFile spools to disk if large, so we pass the file-like object directly.
-    file_ext = file.filename.split(".")[-1] if file.filename else "wav"
+    file_ext = file.filename.split(".")[-1].lower() if file.filename else "wav"
     blob_name = f"{project_id}/{uuid.uuid4()}.{file_ext}"
+
+    # Map extension → MIME type so Azure Speech API can identify the format via SAS URL.
+    _AUDIO_MIME = {
+        "wav":  "audio/wav",
+        "mp3":  "audio/mpeg",
+        "mp4":  "audio/mp4",
+        "m4a":  "audio/mp4",
+        "webm": "audio/webm",
+        "ogg":  "audio/ogg",
+        "aac":  "audio/aac",
+        "flac": "audio/flac",
+    }
+    audio_content_type = _AUDIO_MIME.get(file_ext, "audio/wav")
 
     try:
         # Pass the file-like object directly for streaming upload
         # Note: file.file is a SpooledTemporaryFile or similar file-like object
-        blob_url = await storage_service.upload_blob("audio", blob_name, file.file)
+        blob_url = await storage_service.upload_blob("audio", blob_name, file.file, content_type=audio_content_type)
     except Exception as e:
         logger.error(f"Storage upload failed: {e}")
         raise HTTPException(status_code=500, detail="Storage upload failed")
 
     # 5. Save to Database
+    normalized_pseudonym = participant_pseudonym.strip() if participant_pseudonym else None
+
     new_interview = Interview(
         project_id=project_id,
-        participant_pseudonym=participant_pseudonym,
+        participant_pseudonym=normalized_pseudonym,
         audio_blob_url=blob_url,
         transcription_status="processing",
     )
@@ -192,7 +207,11 @@ async def list_interviews(
     if not project_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    result = await db.execute(select(Interview).filter(Interview.project_id == project_id))
+    result = await db.execute(
+        select(Interview)
+        .filter(Interview.project_id == project_id)
+        .order_by(Interview.created_at.desc())
+    )
     interviews = result.scalars().all()
 
     now = datetime.utcnow()

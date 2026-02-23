@@ -13,6 +13,34 @@ from qdrant_client.models import PointStruct
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_extracted_code(code_data):
+    """
+    Normaliza la salida del modelo para aceptar códigos como dict o string.
+    Formatos soportados:
+    - {"label": "...", "definition": "...", "confidence": 0.9}
+    - "label del código"
+    """
+    if isinstance(code_data, dict):
+        label = (code_data.get("label") or "").strip()
+        definition = (code_data.get("definition") or "").strip()
+        confidence = code_data.get("confidence", 1.0)
+    elif isinstance(code_data, str):
+        label = code_data.strip()
+        definition = ""
+        confidence = 1.0
+    else:
+        return None
+
+    if not label:
+        return None
+
+    return {
+        "label": label,
+        "definition": definition,
+        "confidence": confidence,
+    }
+
 class CodingEngine:
     """Engine responsible for Open and Axial coding of fragments."""
 
@@ -56,7 +84,11 @@ class CodingEngine:
         # 3. Save codes and create links in Relational DB (Postgres)
         codes_to_sync = [] # List of (code_id, label) for Neo4j
 
-        for code_data in coding_results.get("extracted_codes", []):
+        for raw_code in coding_results.get("extracted_codes", []):
+            code_data = _normalize_extracted_code(raw_code)
+            if not code_data:
+                continue
+
             label = code_data.get("label")
             if not label: continue
 

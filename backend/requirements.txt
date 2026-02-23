@@ -6,6 +6,7 @@ azure-identity
 azure-ai-projects
 azure-ai-inference
 azure-cognitiveservices-speech
+azure-ai-transcription
 azure-storage-blob
 aiohttp
 azure-keyvault-secrets

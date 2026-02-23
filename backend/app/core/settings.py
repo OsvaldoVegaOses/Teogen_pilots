@@ -1,5 +1,21 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
+from pathlib import Path
+
+ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
+
+def _read_env_value(key: str) -> str:
+    if not ROOT_ENV_FILE.exists():
+        return ""
+    for raw_line in ROOT_ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        env_key, env_value = line.split("=", 1)
+        if env_key.strip() == key:
+            return env_value.strip().strip('"').strip("'")
+    return ""
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TheoGen"
@@ -45,6 +61,7 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     
     # Foundry Tools (Speech)
+    AZURE_SPEECH_ENDPOINT: str = ""
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = "westeurope"
     
@@ -66,6 +83,13 @@ class Settings(BaseSettings):
     
     @model_validator(mode="after")
     def validate_required_integrations(self):
+        if not self.AZURE_SPEECH_ENDPOINT:
+            self.AZURE_SPEECH_ENDPOINT = _read_env_value("AZURE_SPEECH_ENDPOINT")
+        if not self.AZURE_SPEECH_KEY:
+            self.AZURE_SPEECH_KEY = _read_env_value("AZURE_SPEECH_KEY")
+        if not self.NEO4J_USER:
+            self.NEO4J_USER = _read_env_value("NEO4J_USER") or _read_env_value("NEO4J_USERNAME")
+
         if self.TESTING:
             return self
 
@@ -80,6 +104,10 @@ class Settings(BaseSettings):
             raise ValueError(f"Missing required settings: {', '.join(missing)}")
         return self
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ROOT_ENV_FILE,
+        extra="ignore",
+        env_ignore_empty=True,
+    )
 
 settings = Settings()

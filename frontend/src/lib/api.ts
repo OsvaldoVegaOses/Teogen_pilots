@@ -7,7 +7,25 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8
 /**
  * Helper to get the access token silently.
  */
-async function getAccessToken(): Promise<string | null> {
+function isJwtExpired(token: string, skewSeconds = 60): boolean {
+    try {
+        const [, payloadBase64] = token.split(".");
+        if (!payloadBase64) return true;
+
+        const normalized = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, "=");
+        const payloadRaw = atob(padded);
+        const payload = JSON.parse(payloadRaw) as { exp?: number };
+
+        if (!payload.exp) return true;
+        const now = Math.floor(Date.now() / 1000);
+        return payload.exp <= now + skewSeconds;
+    } catch {
+        return true;
+    }
+}
+
+async function getAccessToken(forceRefresh = false): Promise<string | null> {
     const instance = await ensureMsalInitialized();
     const accounts = instance.getAllAccounts();
 
@@ -24,10 +42,14 @@ async function getAccessToken(): Promise<string | null> {
     const request = {
         ...loginRequest,
         account: activeAccount,
+        forceRefresh,
     };
 
     try {
-        const response = await instance.acquireTokenSilent(request);
+        let response = await instance.acquireTokenSilent(request);
+        if (isJwtExpired(response.idToken)) {
+            response = await instance.acquireTokenSilent({ ...request, forceRefresh: true });
+        }
         // Use idToken, NOT accessToken. With OIDC-only scopes (openid/profile/email),
         // accessToken is issued for Microsoft Graph (different signing keys & audience).
         // The backend validates tokens against our app's CLIENT_ID as audience,
@@ -67,11 +89,40 @@ export async function apiClient(endpoint: string, options: RequestInit = {}): Pr
         const response = await fetch(url, {
             ...options,
             headers,
+            cache: options.cache ?? "no-store",
         });
 
         if (response.status === 401) {
-            console.error("Unauthorized request to API");
-            // Could trigger a re-login flow here if needed
+            const cloned = response.clone();
+            let detail = "";
+            try {
+                const payload = await cloned.json();
+                detail = String(payload?.detail ?? "");
+            } catch {
+                // ignore non-JSON body
+            }
+
+            const shouldRetry = /expired|invalid or expired token|signature has expired/i.test(detail);
+            if (shouldRetry) {
+                const refreshedToken = await getAccessToken(true);
+                if (refreshedToken) {
+                    const retryHeaders: Record<string, string> = {
+                        ...(options.headers as Record<string, string>),
+                        Authorization: `Bearer ${refreshedToken}`,
+                    };
+                    if (!(options.body instanceof FormData) && !retryHeaders["Content-Type"]) {
+                        retryHeaders["Content-Type"] = "application/json";
+                    }
+
+                    return await fetch(url, {
+                        ...options,
+                        headers: retryHeaders,
+                        cache: options.cache ?? "no-store",
+                    });
+                }
+            }
+
+            console.error("Unauthorized request to API", detail || response.statusText);
         }
 
         return response;

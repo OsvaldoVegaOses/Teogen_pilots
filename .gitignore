@@ -1,0 +1,86 @@
+# ── Secretos y configuración local ──────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+frontend/production.env
+backend_app_config.json
+resource_access.json
+spa_config.json
+theogen_app_debug.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.log
+
+# ── pytest cache dirs generados por ACR/CI (permisos especiales) ─────────────
+pytest-cache-files-*/
+
+# ── Archivos temporales de scripts y pruebas ─────────────────────────────────
+temp_audio/
+tmp_*/
+backend/tmp_*.py
+backend/debug_*.py
+backend/debug_output.txt
+backend/debug_res.txt
+backend/debug_db.py
+backend/force_transcribe.py
+backend/process_test_data.py
+backend/trigger_coding.py
+backend/check_out.txt
+backend/backend_err.txt
+backend/backend_log.txt
+backend/pytest_output.txt
+backend/storage/
+
+# ── Node.js / Next.js ─────────────────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# ── Infraestructura — outputs y artefactos de despliegue ─────────────────────
+infra/build/
+infra/*.json
+!infra/main.parameters.json
+!infra/frontend.parameters.json
+infra/deploy_theogen_backend_attempt.txt
+infra/deploy_theogen_backend_output.txt
+infra/deploy_validate_output.txt
+temp_fqdn.txt
+
+# ── GitHub Workflows (no auto-deploy) ────────────────────────────────────────
+.github/workflows/*.yml
+.github/workflows/*.yaml
+
+# ── VS Code ───────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/*.code-workspace
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

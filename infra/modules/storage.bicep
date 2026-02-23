@@ -1,3 +1,23 @@
+@description('Módulo Bicep para crear una Storage Account para static site y blobs')
+param storageAccountName string
+param location string = resourceGroup().location
+param skuName string = 'Standard_LRS'
+param kind string = 'StorageV2'
+
+resource sa 'Microsoft.Storage/storageAccounts@2022-09-01' = {
+  name: storageAccountName
+  location: location
+  sku: {
+    name: skuName
+  }
+  kind: kind
+  properties: {
+    accessTier: 'Hot'
+  }
+}
+
+output storageAccountId string = sa.id
+output primaryEndpoints object = sa.properties.primaryEndpoints
 // infra/modules/storage.bicep
 param location string
 param accountName string

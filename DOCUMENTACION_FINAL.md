@@ -1,4 +1,4 @@
-# TheoGen — Informe Final de Despliegue en Azure
+# TheoGen — Informe Oficial Final de Despliegue en Azure
 
 > **Fecha:** 20 de febrero de 2026  
 > **Suscripción:** Patrocinio de Microsoft Azure (`0fbf8e45-6f68-43bb-acbc-36747f267122`)  
@@ -17,8 +17,8 @@
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │  FRONTEND — Azure Blob Storage (Static Website)                 │
-│  Cuenta: theogenfrontpllrx4ji   |  RG: theogen-rg               │
-│  URL: theogenfrontpllrx4ji.z13.web.core.windows.net             │
+│  Cuenta: theogenfrontwpdxe2pv   |  RG: theogen-rg-eastus        │
+│  URL: theogenfrontwpdxe2pv.z13.web.core.windows.net             │
 │  Tech: Next.js 16 + React 19 + MSAL React 5                    │
 │  Tipo: Exportación estática (output: "export")                  │
 └───────────────────────────┬──────────────────────────────────────┘
@@ -57,17 +57,19 @@ Navegador → MSAL loginRedirect → Azure AD (Entra ID)
 | Container App (Backend) | `theogen-backend` | `theogen-rg-eastus` | East US |
 | Managed Environment | `theogen-env` | `theogen-rg-eastus` | East US |
 | Container Registry (ACR) | `ca39bdb671caacr` | `theogen-rg-eastus` | East US |
-| Storage (Frontend) | `theogenfrontpllrx4ji` | `theogen-rg` | East US |
-| Storage (Archivos) | `theogenstwpdxe2pvgl7o6` | `theogen-rg-eastus` | East US |
+| Storage (Frontend) | `theogenfrontwpdxe2pv` | `theogen-rg-eastus` | East US |
+| Storage (Archivos audio/documents/export) | `theogenstwpdxe2pvgl7o6` | `theogen-rg-eastus` | East US |
 | PostgreSQL Flexible | `theogen-pg-wpdxe2pvgl7o6` | `theogen-rg-eastus` | East US |
 | Redis Cache | `theogen-redis-wpdxe2pvgl7o6` | `theogen-rg-eastus` | East US |
 | Azure OpenAI | `axial-resource` | — | — |
-| Speech Services | — | — | West Europe |
+| Speech Services | theogen-speech-wpdxe2pvgl7o6 | theogen-rg-eastus | eastus | actualizado en .env
 | Entra ID App Registration | Client ID: `c6d2cf71-dcd2-4400-a8be-9eb8c16b1174` | Tenant: `3e151d68-e5ed-4878-932d-251fe1b0eaf1` | — |
 | Neo4j Aura (externo) | Instancia `df99d531` | — | — |
 | Qdrant Cloud (externo) | Cluster `30df124f-...` | — | GCP us-east4 |
+| Área de trabajo de Log Analytics| workspace-theogenrgeastusEBUH  | theogen-rg-eastus |  East US
+| Almacén de claves | theoGenprod | theogen-rg-eastus | East US |
 
----
+ | |
 
 ## 3. Despliegue del Backend — Paso a Paso
 
@@ -259,8 +261,8 @@ const nextConfig: NextConfig = {
 
 ```powershell
 # Obtener nombre y clave del storage account
-$storageAccount = "theogenfrontpllrx4ji"
-$storageKey = az storage account keys list --resource-group theogen-rg --account-name $storageAccount --query "[0].value" -o tsv
+$storageAccount = "theogenfrontwpdxe2pv"
+$storageKey = az storage account keys list --resource-group theogen-rg-eastus --account-name $storageAccount --query "[0].value" -o tsv
 
 # Subir todo el contenido de out/ al contenedor $web
 az storage blob upload-batch `
@@ -275,7 +277,7 @@ az storage blob upload-batch `
 
 ```powershell
 # La URL del frontend
-Invoke-WebRequest -Uri "https://theogenfrontpllrx4ji.z13.web.core.windows.net/" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "https://theogenfrontwpdxe2pv.z13.web.core.windows.net/" -UseBasicParsing | Select-Object StatusCode
 # Esperado: 200
 ```
 
@@ -295,7 +297,7 @@ Ejecutar `deploy_frontend_fixed.ps1` desde la raíz del proyecto realiza todos l
    - **Tipo de cuenta:** Cuentas en cualquier directorio organizacional + cuentas personales de Microsoft
    - **URI de redirección (SPA):**
      - `http://localhost:3000/login/` (desarrollo)
-     - `https://theogenfrontpllrx4ji.z13.web.core.windows.net/login/` (producción)
+    - `https://theogenfrontwpdxe2pv.z13.web.core.windows.net/login/` (producción)
    - **Tipo de plataforma:** SPA (Single Page Application) — NO Web
 4. Anotar:
    - `Application (client) ID` → `AZURE_AD_CLIENT_ID` / `NEXT_PUBLIC_AZURE_AD_CLIENT_ID`
@@ -504,7 +506,7 @@ npm run build
 
 | Componente | URL |
 |-----------|-----|
-| Frontend (App) | https://theogenfrontpllrx4ji.z13.web.core.windows.net/ |
+| Frontend (App) | https://theogenfrontwpdxe2pv.z13.web.core.windows.net/ |
 | Backend (API Docs) | https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io/docs |
 | Backend (API base) | https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io/api |
 | Health Check | https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io/health |
@@ -553,3 +555,7 @@ Invoke-WebRequest -Uri "https://theogen-backend.gentlemoss-dcba183f.eastus.azure
 ---
 
 *Documento generado el 20 de febrero de 2026. Mantener actualizado con cada cambio significativo en la infraestructura.*
+
+**Nota de actualización (22 de febrero de 2026):**
+- Se validó y dejó activo el frontend en `theogenfrontwpdxe2pv` (`theogen-rg-eastus`).
+- Se ejecutó limpieza de datos de prueba en producción: eliminado `test_project` ("Proyecto de investigación") y datos asociados.

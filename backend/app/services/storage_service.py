@@ -1,5 +1,5 @@
 from azure.storage.blob.aio import BlobServiceClient
-from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+from azure.storage.blob import generate_blob_sas, BlobSasPermissions, ContentSettings
 from ..core.settings import settings
 from datetime import datetime, timedelta
 import logging
@@ -53,10 +53,18 @@ class AzureBlobStorageService:
                 "Set AZURE_STORAGE_CONNECTION_STRING or both AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY."
             )
 
-    async def upload_blob(self, container_key: str, blob_name: str, data: Union[bytes, BinaryIO]) -> str:
+    async def upload_blob(
+        self,
+        container_key: str,
+        blob_name: str,
+        data: Union[bytes, BinaryIO],
+        content_type: str = "application/octet-stream",
+    ) -> str:
         """
         Upload blob and return its URL.
         Accepts bytes or a file-like object (for streaming).
+        Setting content_type is critical: the Azure Speech API uses it to determine
+        the audio format when fetching via SAS URL; wrong type causes HTTP 415.
         """
         self._ensure_client()
         container_name = self.CONTAINERS.get(container_key, "misc")
@@ -64,11 +72,11 @@ class AzureBlobStorageService:
         try:
             container_client = self.client.get_container_client(container_name)
             blob_client = container_client.get_blob_client(blob_name)
-            
-            # upload_blob handles both bytes and file-like objects automatically
-            # If data is a file-like object, it streams it.
-            await blob_client.upload_blob(data, overwrite=True)
-            
+            await blob_client.upload_blob(
+                data,
+                overwrite=True,
+                content_settings=ContentSettings(content_type=content_type),
+            )
             return blob_client.url
         except Exception as e:
             logger.error(f"Failed to upload blob {blob_name} to {container_name}: {e}")

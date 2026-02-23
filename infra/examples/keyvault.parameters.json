@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vaultName": {
+      "value": "theogen-kv-prod"
+    },
+    "location": {
+      "value": "eastus2"
+    },
+    "skuName": {
+      "value": "standard"
+    },
+    "enableRbac": {
+      "value": true
+    },
+    "roleAssignments": {
+      "value": []
+    }
+  }
+}

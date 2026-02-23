@@ -16,7 +16,12 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
             const response = await apiClient(`interviews/${projectId}`);
             if (response.ok) {
                 const data = await response.json();
-                setInterviews(data);
+                const sorted = [...data].sort((a, b) => {
+                    const aTime = new Date(a.created_at || 0).getTime();
+                    const bTime = new Date(b.created_at || 0).getTime();
+                    return bTime - aTime;
+                });
+                setInterviews(sorted);
             }
         } catch (error) {
             console.error("Error fetching interview statuses:", error);
@@ -28,12 +33,10 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
     }, [projectId]);
 
     useEffect(() => {
-        const hasProcessing = interviews.some((item) => item.transcription_status === "processing");
-        if (!hasProcessing) return;
-
+        if (!projectId) return;
         const intervalId = setInterval(fetchInterviewStatuses, 10000);
         return () => clearInterval(intervalId);
-    }, [interviews, projectId]);
+    }, [projectId]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -76,12 +79,12 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
             <h3 className="text-xl font-bold mb-4 dark:text-white">Subir Nueva Entrevista</h3>
             <form onSubmit={handleUpload} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-zinc-500 mb-1">Seudónimo del Participante</label>
+                    <label className="block text-sm font-medium text-zinc-500 mb-1">Seudónimo del Participante (opcional)</label>
                     <input
                         type="text"
                         value={pseudonym}
                         onChange={(e) => setPseudonym(e.target.value)}
-                        placeholder="Ej: Participante A"
+                        placeholder="Ej: Participante A (puedes dejarlo vacío)"
                         className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:border-zinc-800 dark:bg-zinc-950"
                     />
                 </div>
@@ -117,13 +120,15 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                                     ? "✅ Completado"
                                     : status === "processing"
                                         ? "⏳ Procesando"
+                                        : status === "retrying"
+                                            ? "🔄 Reintentando"
                                         : status === "failed"
                                             ? "❌ Falló"
                                             : "⚪ Pendiente";
 
                                 return (
                                     <div key={item.id} className="flex items-center justify-between text-xs">
-                                        <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Sin seudónimo"}</span>
+                                        <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
                                         <span className="font-medium">{statusLabel}</span>
                                     </div>
                                 );

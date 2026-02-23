@@ -138,11 +138,13 @@ export default function Dashboard() {
         if (!selectedProjectId || generatingTheory) return;
 
         setGeneratingTheory(true);
-        setTheoryMessage("⏳ Generando teoría... este proceso puede tardar unos minutos.");
+        setTheoryMessage("⏳ Iniciando generación de teoría...");
 
         try {
             const { apiClient } = await import("@/lib/api");
-            const response = await apiClient(`/projects/${selectedProjectId}/generate-theory`, {
+
+            // 1. Enqueue — returns 202 with task_id immediately
+            const enqueueResp = await apiClient(`/projects/${selectedProjectId}/generate-theory`, {
                 method: "POST",
                 body: JSON.stringify({
                     min_interviews: 1,
@@ -150,18 +152,72 @@ export default function Dashboard() {
                 }),
             });
 
-            if (response.ok) {
-                const theory = await response.json();
-                setActiveTheory(theory);
-                setTheoryMessage("✅ Teoría generada correctamente.");
-            } else {
-                const err = await response.json().catch(() => ({}));
-                setTheoryMessage(`❌ ${err.detail || "No se pudo generar la teoría."}`);
+            if (!enqueueResp.ok) {
+                const err = await enqueueResp.json().catch(() => ({}));
+                setTheoryMessage(`❌ ${err.detail || "No se pudo iniciar la generación."}`);
+                setGeneratingTheory(false);
+                return;
             }
+
+            const { task_id } = await enqueueResp.json();
+            setTheoryMessage("⏳ Generando teoría... (puede tardar entre 2 y 10 minutos según el volumen de datos)");
+
+            // 2. Poll every 5 seconds until completed or failed (max 10 min)
+            let attempts = 0;
+            const maxAttempts = 120; // 10 min max
+            const STEP_LABELS: Record<number, string> = {
+                6:  "Analizando categorías...",
+                12: "Construyendo grafo de conocimiento...",
+                24: "Calculando métricas de red...",
+                36: "Generando embeddings semánticos...",
+                48: "Identificando categoría central...",
+                60: "Construyendo paradigma Straussiano...",
+                72: "Analizando saturación teórica...",
+                90: "Guardando teoría en base de datos...",
+            };
+            const poll = setInterval(async () => {
+                attempts++;
+                try {
+                    const statusResp = await apiClient(
+                        `/projects/${selectedProjectId}/generate-theory/status/${task_id}`
+                    );
+                    if (!statusResp.ok) {
+                        clearInterval(poll);
+                        setTheoryMessage("❌ Error al consultar estado de la tarea.");
+                        setGeneratingTheory(false);
+                        return;
+                    }
+                    const taskData = await statusResp.json();
+
+                    if (taskData.status === "completed") {
+                        clearInterval(poll);
+                        setActiveTheory(taskData.result);
+                        setTheoryMessage("✅ Teoría generada correctamente.");
+                        setGeneratingTheory(false);
+                    } else if (taskData.status === "failed") {
+                        clearInterval(poll);
+                        setTheoryMessage(`❌ ${taskData.error || "La generación falló."}`);
+                        setGeneratingTheory(false);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(poll);
+                        setTheoryMessage("❌ Tiempo de espera agotado (10 min). El proceso continúa en segundo plano — recarga en unos minutos.");
+                        setGeneratingTheory(false);
+                    } else {
+                        const elapsed = attempts * 5;
+                        const stepMsg = STEP_LABELS[attempts] ?? "";
+                        const dots = ".".repeat((attempts % 3) + 1);
+                        setTheoryMessage(`⏳ ${stepMsg || `Generando teoría${dots}`} (${elapsed}s / ~10 min máx)`);
+                    }
+                } catch {
+                    clearInterval(poll);
+                    setTheoryMessage("❌ Error de conexión al consultar estado.");
+                    setGeneratingTheory(false);
+                }
+            }, 5000);
+
         } catch (error) {
             console.error("Error generating theory:", error);
             setTheoryMessage("❌ Error de conexión al generar teoría.");
-        } finally {
             setGeneratingTheory(false);
         }
     }

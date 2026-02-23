@@ -50,33 +50,39 @@ catch {
 }
 
 # Variables del despliegue
+$subscriptionId = "0fbf8e45-6f68-43bb-acbc-36747f267122"
 $resourceGroupName = "theogen-rg"
-$projectName = "theogen"
-$location = "East US"
-$environment = "prod"
+$preferredStorageAccount = "theogenfrontwpdxe2pv"
 
-# Crear grupo de recursos si no existe
-Write-Host "`nVerificando grupo de recursos..." -ForegroundColor Yellow
+Write-Host "Estableciendo suscripción objetivo..." -ForegroundColor Yellow
+az account set --subscription $subscriptionId
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error al establecer la suscripción $subscriptionId" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Verificando grupo de recursos configurado..." -ForegroundColor Yellow
 $rgExists = az group exists --name $resourceGroupName 2>$null
-
-if ($rgExists -eq "false") {
-    Write-Host "Creando grupo de recursos: $resourceGroupName" -ForegroundColor Yellow
-    az group create --name $resourceGroupName --location $location --tags Project=TheoGen Environment=$environment
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error al crear el grupo de recursos" -ForegroundColor Red
+if ($rgExists -ne "true") {
+    Write-Host "El grupo $resourceGroupName no existe. Intentando detectar RG de frontend..." -ForegroundColor Yellow
+    $detectedRg = az storage account list --query "[?contains(name, 'theogenfront') && name=='$preferredStorageAccount'].resourceGroup | [0]" -o tsv
+    if (-not $detectedRg) {
+        $detectedRg = az storage account list --query "[?contains(name, 'theogenfront')].resourceGroup | [0]" -o tsv
+    }
+    if (-not $detectedRg) {
+        Write-Host "Error: No fue posible detectar un grupo de recursos con storage de frontend." -ForegroundColor Red
         exit 1
     }
-    Write-Host "Grupo de recursos creado exitosamente" -ForegroundColor Green
-}
-else {
-    Write-Host "Grupo de recursos $resourceGroupName ya existe" -ForegroundColor Green
+    $resourceGroupName = $detectedRg
+    Write-Host "Usando grupo de recursos detectado: $resourceGroupName" -ForegroundColor Cyan
 }
 
 # Compilar el frontend
 Write-Host "`nCompilando el frontend de TheoGen..." -ForegroundColor Yellow
 
 # Cambiar al directorio del frontend
-$frontendPath = "c:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\frontend"
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$frontendPath = Join-Path $scriptRoot "frontend"
 if (Test-Path $frontendPath) {
     Set-Location $frontendPath
     Write-Host "Navegando al directorio: $frontendPath" -ForegroundColor Cyan
@@ -112,36 +118,15 @@ else {
     exit 1
 }
 
-# Desplegar recursos de Azure con Bicep
-Write-Host "`nDesplegando recursos de Azure para el frontend..." -ForegroundColor Yellow
-
-$bicepFile = "c:\Users\osval\OneDrive - ONG Tren Ciudadano\digital skills\Teogen\infra\modules\frontend.fixed.bicep"
-
-if (Test-Path $bicepFile) {
-    Write-Host "Usando archivo Bicep: $bicepFile" -ForegroundColor Cyan
-    
-    # Compilar y desplegar el archivo Bicep
-    az deployment group create `
-        --resource-group $resourceGroupName `
-        --template-file $bicepFile `
-        --parameters projectName=$projectName environment=$environment `
-        --name "frontend-deployment-$(Get-Date -Format 'yyyyMMddHHmmss')"
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error al desplegar los recursos de Azure" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "Recursos de Azure desplegados exitosamente" -ForegroundColor Green
-}
-else {
-    Write-Host "Error: No se encuentra el archivo Bicep en $bicepFile" -ForegroundColor Red
-    exit 1
-}
-
 # Obtener información del almacenamiento
 Write-Host "`nObteniendo información del almacenamiento..." -ForegroundColor Yellow
 
-$storageAccountName = az storage account list --resource-group $resourceGroupName --query "[?contains(name, 'theogenfront')].name" -o tsv
+$storageAccountName = az storage account show --resource-group $resourceGroupName --name $preferredStorageAccount --query name -o tsv 2>$null
+if (-not $storageAccountName) {
+    Write-Host "No se encontró la cuenta preferida '$preferredStorageAccount'. Buscando alternativa por prefijo..." -ForegroundColor Yellow
+    $storageAccountName = az storage account list --resource-group $resourceGroupName --query "[?contains(name, 'theogenfront')].name | [0]" -o tsv
+}
+
 if ($storageAccountName) {
     Write-Host "Cuenta de almacenamiento encontrada: $storageAccountName" -ForegroundColor Green
     
@@ -183,11 +168,6 @@ if ($storageAccountName) {
     Write-Host "`n¡Frontend desplegado exitosamente!" -ForegroundColor Green
     Write-Host "URL del frontend: $frontendUrl" -ForegroundColor Cyan
     
-    # Si hay CDN, también mostrar esa URL
-    $cdnEndpoint = az cdn endpoint list --profile-name "${projectName}-cdn-$environment" --resource-group $resourceGroupName --query "[0].hostName" -o tsv 2>$null
-    if ($cdnEndpoint) {
-        Write-Host "URL del CDN: https://$cdnEndpoint" -ForegroundColor Cyan
-    }
 }
 else {
     Write-Host "Error: No se encontró la cuenta de almacenamiento del frontend" -ForegroundColor Red
