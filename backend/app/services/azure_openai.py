@@ -77,15 +77,28 @@ class FoundryOpenAIService:
         return await self._chat_call(settings.MODEL_CLAUDE_ADVANCED, messages, **kwargs)
 
     async def _chat_call(self, model: str, messages: list, temperature: float = 0.3, **kwargs):
-        """Unified async chat completion call. No mock/fallback."""
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            **kwargs,
+        """Unified async chat completion call with retry on empty choices (rate-limit resilience)."""
+        import asyncio
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                **kwargs,
+            )
+            if response.choices:
+                return response.choices[0].message.content
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt  # 1s, 2s
+                logger.warning(
+                    f"Model '{model}' returned empty choices "
+                    f"(attempt {attempt + 1}/{max_retries}). Retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+        raise RuntimeError(
+            f"Model '{model}' returned empty choices after {max_retries} attempts "
+            f"(possible rate-limit or content filter)."
         )
-        if not response.choices:
-            raise RuntimeError(f"Model '{model}' returned empty choices (possible rate-limit or content filter).")
-        return response.choices[0].message.content
 
 foundry_openai = FoundryOpenAIService()
