@@ -1,5 +1,6 @@
 param managedEnvironmentId string
 param keyVaultId string
+param redisHost string = ''
 param image string = 'ca39bdb671caacr.azurecr.io/theogen-backend:latest'
 
 module backendApp '../modules/containerapp.bicep' = {
@@ -8,6 +9,11 @@ module backendApp '../modules/containerapp.bicep' = {
     containerAppName: 'theogen-backend'
     managedEnvironmentId: managedEnvironmentId
     image: image
+    enableIngress: true
+    ingressExternal: true
+    targetPort: 8000
+    minReplicas: 1
+    maxReplicas: 4
     keyVaultSecrets: [
       {
         name: 'AZURE_OPENAI_KEY'
@@ -25,12 +31,26 @@ module backendApp '../modules/containerapp.bicep' = {
         name: 'QDRANT_API_KEY'
         keyVaultSecretId: '${keyVaultId}/secrets/qdrant-api-key'
       }
+      {
+        name: 'AZURE_REDIS_KEY'
+        keyVaultSecretId: '${keyVaultId}/secrets/azure-redis-key'
+      }
     ]
     registries: [
       {
         server: 'ca39bdb671caacr.azurecr.io'
         username: ''
         passwordSecretRef: ''
+      }
+    ]
+    additionalEnv: [
+      {
+        name: 'AZURE_REDIS_HOST'
+        value: redisHost
+      }
+      {
+        name: 'THEORY_USE_CELERY'
+        value: 'true'
       }
     ]
   }

@@ -24,6 +24,25 @@ Notas:
    - Metricas reales del grafo (`counts`, `category_centrality`, `category_cooccurrence`).
    - Evidencia semantica de Qdrant (`semantic_evidence_top`).
 
+## Modo distribuido (Celery + Redis)
+
+Para ejecutar la generacion de teoria en workers dedicados:
+
+1. Configurar variables:
+   - `THEORY_USE_CELERY=true`
+   - `AZURE_REDIS_HOST=<host>`
+   - `AZURE_REDIS_KEY=<key>`
+   - Opcional: `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
+2. Levantar backend API normal.
+3. Levantar worker:
+   - `python backend/start_worker.py`
+   - o `celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO --concurrency=4`
+
+Notas:
+- El endpoint `POST /api/projects/{project_id}/generate-theory` mantiene respuesta `202`.
+- El estado se consulta con `GET /api/projects/{project_id}/generate-theory/status/{task_id}`.
+- El status incluye `step`, `progress`, `error_code`, `execution_mode` y `next_poll_seconds`.
+
 ## Verificacion E2E sugerida
 
 1. Ejecutar `POST /api/codes/auto-code/{interview_id}`.

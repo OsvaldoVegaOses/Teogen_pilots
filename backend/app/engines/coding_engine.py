@@ -1,27 +1,32 @@
 # backend/app/engines/coding_engine.py
-from ..services.azure_openai import foundry_openai
-from ..services.qdrant_service import qdrant_service
-from ..services.neo4j_service import neo4j_service
-from ..prompts.axial_coding import AXIAL_CODING_SYSTEM_PROMPT, get_coding_user_prompt
-import json
-import logging
+from __future__ import annotations
+
 import asyncio
+import logging
 from uuid import UUID
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from ..models.models import Fragment, Code, Project, code_fragment_links
-from sqlalchemy import select, update
+
 from qdrant_client.models import PointStruct
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.json_utils import safe_json_loads
+from ..core.settings import settings
+from ..models.models import Code, Fragment, Project, code_fragment_links
+from ..prompts.axial_coding import AXIAL_CODING_SYSTEM_PROMPT, get_coding_user_prompt
+from ..services.azure_openai import foundry_openai
+from ..services.neo4j_service import neo4j_service
+from ..services.qdrant_service import qdrant_service
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_extracted_code(code_data):
     """
-    Normaliza la salida del modelo para aceptar códigos como dict o string.
-    Formatos soportados:
+    Normalize model output to support dict and string code formats.
+    Supported formats:
     - {"label": "...", "definition": "...", "confidence": 0.9}
-    - "label del código"
+    - "code label"
     """
     if isinstance(code_data, dict):
         label = (code_data.get("label") or "").strip()
@@ -43,6 +48,7 @@ def _normalize_extracted_code(code_data):
         "confidence": confidence,
     }
 
+
 class CodingEngine:
     """Engine responsible for Open and Axial coding of fragments."""
 
@@ -59,14 +65,17 @@ class CodingEngine:
     ) -> dict:
         """
         Codes a single fragment. `codes_cache` (optional) is a shared
-        {label: Code} dict that avoids re-querying the DB on every call.
-        When not provided a fresh query is issued (backward-compatible).
+        {label_lower: Code} dict that avoids re-querying the DB on every call.
         """
         if codes_cache is None:
-            existing_list = (await db.execute(
-                select(Code).filter(Code.project_id == project_id)
-            )).scalars().all()
-            codes_cache = {c.label: c for c in existing_list}
+            existing_list = (
+                await db.execute(select(Code).filter(Code.project_id == project_id))
+            ).scalars().all()
+            codes_cache = {
+                (c.label or "").strip().lower(): c
+                for c in existing_list
+                if c.label
+            }
 
         codes_snapshot = [
             {"label": c.label, "definition": c.definition}
@@ -81,9 +90,9 @@ class CodingEngine:
                 ],
                 response_format={"type": "json_object"},
             )
-            coding_results = json.loads(raw)
+            coding_results = safe_json_loads(raw)
         except Exception as e:
-            logger.error("AI Coding failed for fragment %s: %s", fragment_id, e)
+            logger.error("AI coding failed for fragment %s: %s", fragment_id, e)
             return {}
 
         codes_to_sync: list[tuple[UUID, str]] = []
@@ -95,13 +104,16 @@ class CodingEngine:
             label = code_data.get("label", "").strip()
             if not label:
                 continue
+
             code_id = await self._get_or_create_code(db, project_id, label, code_data, codes_cache)
             codes_to_sync.append((code_id, label))
-            links_to_insert.append({
-                "code_id": code_id,
-                "fragment_id": fragment_id,
-                "confidence": code_data.get("confidence", 1.0),
-            })
+            links_to_insert.append(
+                {
+                    "code_id": code_id,
+                    "fragment_id": fragment_id,
+                    "confidence": code_data.get("confidence", 1.0),
+                }
+            )
 
         if links_to_insert:
             await db.execute(
@@ -141,8 +153,6 @@ class CodingEngine:
 
         return coding_results
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
     async def _get_or_create_code(
         self,
         db: AsyncSession,
@@ -151,17 +161,26 @@ class CodingEngine:
         code_data: dict,
         codes_cache: dict,
     ) -> UUID:
-        """Return the id of an existing or newly-created Code, updating the cache."""
-        if label in codes_cache:
-            return codes_cache[label].id
+        """Return the id of an existing or newly-created Code, updating cache."""
+        label = label.strip()
+        label_lower = label.lower()
+        if label_lower in codes_cache:
+            return codes_cache[label_lower].id
+
         existing = (
             await db.execute(
-                select(Code).filter(Code.label == label, Code.project_id == project_id)
+                select(Code)
+                .filter(
+                    func.lower(func.trim(Code.label)) == label_lower,
+                    Code.project_id == project_id,
+                )
+                .limit(1)
             )
-        ).scalar_one_or_none()
+        ).scalars().first()
         if existing:
-            codes_cache[label] = existing
+            codes_cache[label_lower] = existing
             return existing.id
+
         new_code = Code(
             project_id=project_id,
             label=label,
@@ -170,57 +189,53 @@ class CodingEngine:
         )
         db.add(new_code)
         await db.flush()
-        codes_cache[label] = new_code
+        codes_cache[label_lower] = new_code
         return new_code.id
-
-    # ── Batch interview coding ────────────────────────────────────────────────
 
     async def auto_code_interview(self, project_id: UUID, interview_id: UUID, db: AsyncSession):
         """
         Two-phase batch processor for a full interview:
-
-        Phase 1 – Parallel LLM calls (Semaphore 8, zero DB writes).
-          All fragments are coded concurrently using the project codes snapshot
-          captured before the phase starts.
-
-        Phase 2 – Sequential DB writes using a shared codes_cache (eliminates
-          N+1 SELECT), then single-call batch Qdrant upsert and Neo4j UNWIND
-          sync (3 queries total for the whole interview).
+        1) Parallel LLM coding calls (no DB writes).
+        2) Sequential DB writes + batch Qdrant + batch Neo4j sync.
         """
         project = (
-            await db.execute(select(Project).where(Project.id == project_id))
-        ).scalar_one_or_none()
+            await db.execute(select(Project).where(Project.id == project_id).limit(1))
+        ).scalars().first()
         if not project:
             raise ValueError(f"Project {project_id} not found")
+
         await neo4j_service.ensure_project_node(project_id, project.name)
 
         fragments = (
             await db.execute(select(Fragment).filter(Fragment.interview_id == interview_id))
         ).scalars().all()
         if not fragments:
-            logger.info("[coding][%s] No fragments, skipping.", interview_id)
+            logger.info("[coding][%s] no fragments, skipping", interview_id)
             return
 
-        # ── Load codes cache ONCE (eliminates per-fragment SELECT) ────────────
         codes_cache: dict[str, Code] = {
-            c.label: c
+            (c.label or "").strip().lower(): c
             for c in (
                 await db.execute(select(Code).filter(Code.project_id == project_id))
             ).scalars().all()
+            if c.label
         }
         codes_snapshot = [
-            {"label": c.label, "definition": c.definition} for c in codes_cache.values()
+            {"label": c.label, "definition": c.definition}
+            for c in codes_cache.values()
         ]
+
         logger.info(
-            "[coding][%s] cache=%d codes  fragments=%d",
-            interview_id, len(codes_cache), len(fragments),
+            "[coding][%s] cache=%d codes fragments=%d",
+            interview_id,
+            len(codes_cache),
+            len(fragments),
         )
 
-        # ── PHASE 1: Parallel LLM calls ───────────────────────────────────────
-        _sem = asyncio.Semaphore(8)
+        sem = asyncio.Semaphore(max(1, settings.CODING_FRAGMENT_CONCURRENCY))
 
         async def _call_llm(fragment: Fragment):
-            async with _sem:
+            async with sem:
                 try:
                     raw = await self.ai.claude_analysis(
                         messages=[
@@ -229,7 +244,7 @@ class CodingEngine:
                         ],
                         response_format={"type": "json_object"},
                     )
-                    return fragment, json.loads(raw)
+                    return fragment, safe_json_loads(raw)
                 except Exception as e:
                     logger.error("LLM coding failed for fragment %s: %s", fragment.id, e)
                     return fragment, {}
@@ -237,35 +252,37 @@ class CodingEngine:
         llm_results: list[tuple[Fragment, dict]] = await asyncio.gather(
             *[_call_llm(f) for f in fragments]
         )
-        logger.info("[coding][%s] Phase 1 DONE – %d LLM calls", interview_id, len(fragments))
 
-        # ── PHASE 2: Sequential DB writes + collect for batch ops ─────────────
-        neo4j_pairs: list[tuple[UUID, UUID]] = []   # (fragment_id, code_id)
-        embed_texts:  list[str]  = []
+        neo4j_pairs: list[tuple[UUID, UUID]] = []
+        embed_texts: list[str] = []
         embed_frag_ids: list[UUID] = []
         embed_code_labels: list[list[str]] = []
 
         for fragment, coding_result in llm_results:
             labels_this_frag: list[str] = []
-            links_to_insert:  list[dict] = []
+            links_to_insert: list[dict] = []
 
             for raw_code in coding_result.get("extracted_codes", []):
                 code_data = _normalize_extracted_code(raw_code)
                 if not code_data:
                     continue
+
                 label = code_data.get("label", "").strip()
                 if not label:
                     continue
+
                 code_id = await self._get_or_create_code(
                     db, project_id, label, code_data, codes_cache
                 )
                 labels_this_frag.append(label)
                 neo4j_pairs.append((fragment.id, code_id))
-                links_to_insert.append({
-                    "code_id": code_id,
-                    "fragment_id": fragment.id,
-                    "confidence": code_data.get("confidence", 1.0),
-                })
+                links_to_insert.append(
+                    {
+                        "code_id": code_id,
+                        "fragment_id": fragment.id,
+                        "confidence": code_data.get("confidence", 1.0),
+                    }
+                )
 
             if links_to_insert:
                 await db.execute(
@@ -278,11 +295,6 @@ class CodingEngine:
             embed_frag_ids.append(fragment.id)
             embed_code_labels.append(labels_this_frag)
 
-        logger.info(
-            "[coding][%s] Phase 2 DONE – codes_cache=%d", interview_id, len(codes_cache)
-        )
-
-        # ── Batch Qdrant upsert (N fragments → 1 embedding API call) ─────────
         try:
             all_embeddings = await self.ai.generate_embeddings(embed_texts)
             qdrant_points = [
@@ -303,13 +315,9 @@ class CodingEngine:
                     .where(Fragment.id.in_(embed_frag_ids))
                     .values(embedding_synced=True)
                 )
-            logger.info(
-                "[coding][%s] Batch Qdrant: %d points upserted", interview_id, len(qdrant_points)
-            )
         except Exception as e:
             logger.error("Batch Qdrant upsert failed for interview %s: %s", interview_id, e)
 
-        # ── Batch Neo4j UNWIND (3 queries total for the interview) ────────────
         try:
             await neo4j_service.batch_sync_interview(
                 project_id=project_id,
@@ -317,14 +325,16 @@ class CodingEngine:
                 codes_cache=codes_cache,
                 fragment_code_pairs=neo4j_pairs,
             )
-            logger.info("[coding][%s] Batch Neo4j sync complete", interview_id)
         except Exception as e:
             logger.error("Batch Neo4j sync failed for interview %s: %s", interview_id, e)
 
         await db.commit()
         logger.info(
-            "[coding][%s] COMPLETE – %d fragments  %d codes total",
-            interview_id, len(fragments), len(codes_cache),
+            "[coding][%s] complete fragments=%d total_codes=%d",
+            interview_id,
+            len(fragments),
+            len(codes_cache),
         )
+
 
 coding_engine = CodingEngine()

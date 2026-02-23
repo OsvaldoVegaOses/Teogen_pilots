@@ -1,4 +1,4 @@
-@description('Módulo para crear o actualizar un Azure Container App con identidad gestionada y referencias a secretos en Key Vault')
+@description('Modulo para crear o actualizar un Azure Container App con identidad gestionada, secretos y escalado configurable')
 param containerAppName string
 param location string = resourceGroup().location
 param managedEnvironmentId string
@@ -7,8 +7,23 @@ param cpu string = '0.5'
 param memory string = '1Gi'
 @description('Array de objetos { name: string, keyVaultSecretId: string }')
 param keyVaultSecrets array = []
-@description('Array de registry credentials { server: string, username: string, password: string }')
+@description('Array de objetos { name: string, value: string } para secretos inline')
+param inlineSecrets array = []
+@description('Array de registry credentials { server: string, username: string, passwordSecretRef: string }')
 param registries array = []
+@description('Array de variables de entorno planas { name: string, value: string }')
+param additionalEnv array = []
+@description('Comando del contenedor (opcional), por ejemplo ["python"]')
+param command array = []
+@description('Argumentos del contenedor (opcional), por ejemplo ["start_worker.py"]')
+param args array = []
+param minReplicas int = 1
+param maxReplicas int = 3
+@description('Reglas de escala KEDA para Container Apps')
+param scaleRules array = []
+param enableIngress bool = false
+param ingressExternal bool = false
+param targetPort int = 8000
 
 resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
   name: containerAppName
@@ -19,38 +34,64 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
   properties: {
     managedEnvironmentId: managedEnvironmentId
     configuration: {
-      // Declare secret names; values will be set after deployment from Key Vault
-      secrets: [for s in keyVaultSecrets: {
-        name: s.name
-      }]
+      // Key Vault-backed secrets are resolved by the app managed identity.
+      secrets: concat(
+        [for s in keyVaultSecrets: {
+          name: s.name
+          keyVaultUrl: s.keyVaultSecretId
+          identity: 'system'
+        }],
+        [for s in inlineSecrets: {
+          name: s.name
+          value: s.value
+        }]
+      )
       registries: [for r in registries: {
         server: r.server
         username: r.username
         passwordSecretRef: r.passwordSecretRef
       }]
+      ingress: enableIngress ? {
+        external: ingressExternal
+        targetPort: targetPort
+        transport: 'auto'
+      } : null
     }
     template: {
       containers: [
         {
           name: containerAppName
           image: image
+          command: command
+          args: args
           resources: {
             cpu: cpu
             memory: memory
           }
-          env: [for s in keyVaultSecrets: {
-            name: s.name
-            secretRef: s.name
-          }]
+          env: concat(
+            [for s in keyVaultSecrets: {
+              name: s.name
+              secretRef: s.name
+            }],
+            [for s in inlineSecrets: {
+              name: s.name
+              secretRef: s.name
+            }],
+            [for e in additionalEnv: {
+              name: e.name
+              value: e.value
+            }]
+          )
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 3
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
+        rules: scaleRules
       }
     }
   }
 }
 
 output principalId string = containerApp.identity.principalId
-output fqdn string = containerApp.properties.configuration.ingress.fqdn
+output fqdn string = enableIngress ? containerApp.properties.configuration.ingress.fqdn : ''

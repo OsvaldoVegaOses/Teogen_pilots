@@ -35,6 +35,7 @@ module storageModule '../modules/storage.bicep' = {
 
 // Backend Container App (uses existing managed env)
 param managedEnvironmentId string
+param redisHost string
 param image string = 'ca39bdb671caacr.azurecr.io/theogen-backend:latest'
 
 module backendApp '../modules/containerapp.bicep' = {
@@ -44,6 +45,9 @@ module backendApp '../modules/containerapp.bicep' = {
     location: location
     managedEnvironmentId: managedEnvironmentId
     image: image
+    enableIngress: true
+    ingressExternal: true
+    targetPort: 8000
     keyVaultSecrets: [
       {
         name: 'AZURE_OPENAI_KEY'
@@ -58,8 +62,102 @@ module backendApp '../modules/containerapp.bicep' = {
         keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/neo4j-password'
       }
       {
+        name: 'AZURE_REDIS_KEY'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/azure-redis-key'
+      }
+      {
         name: 'QDRANT_API_KEY'
         keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/qdrant-api-key'
+      }
+    ]
+    additionalEnv: [
+      {
+        name: 'AZURE_REDIS_HOST'
+        value: redisHost
+      }
+      {
+        name: 'THEORY_USE_CELERY'
+        value: 'true'
+      }
+    ]
+    registries: [
+      {
+        server: 'ca39bdb671caacr.azurecr.io'
+        username: ''
+        passwordSecretRef: ''
+      }
+    ]
+  }
+}
+
+// Worker Container App (Celery)
+module theoryWorker '../modules/containerapp.bicep' = {
+  name: 'theogenTheoryWorker'
+  params: {
+    containerAppName: 'theogen-theory-worker'
+    location: location
+    managedEnvironmentId: managedEnvironmentId
+    image: image
+    command: [
+      'python'
+    ]
+    args: [
+      'start_worker.py'
+    ]
+    cpu: '1.0'
+    memory: '2Gi'
+    minReplicas: 1
+    maxReplicas: 10
+    keyVaultSecrets: [
+      {
+        name: 'AZURE_OPENAI_KEY'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/azure-openai-api-key'
+      }
+      {
+        name: 'AZURE_PG_PASSWORD'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/azure-pg-password'
+      }
+      {
+        name: 'NEO4J_PASSWORD'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/neo4j-password'
+      }
+      {
+        name: 'AZURE_REDIS_KEY'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/azure-redis-key'
+      }
+      {
+        name: 'QDRANT_API_KEY'
+        keyVaultSecretId: '${kv.outputs.keyVaultResourceId}/secrets/qdrant-api-key'
+      }
+    ]
+    additionalEnv: [
+      {
+        name: 'AZURE_REDIS_HOST'
+        value: redisHost
+      }
+      {
+        name: 'THEORY_USE_CELERY'
+        value: 'true'
+      }
+    ]
+    scaleRules: [
+      {
+        name: 'celery-queue-depth'
+        custom: {
+          type: 'redis'
+          metadata: {
+            address: '${redisHost}:6380'
+            listName: 'celery'
+            listLength: '5'
+            enableTLS: 'true'
+          }
+          auth: [
+            {
+              secretRef: 'AZURE_REDIS_KEY'
+              triggerParameter: 'password'
+            }
+          ]
+        }
       }
     ]
     registries: [
@@ -76,3 +174,4 @@ output keyVaultId string = kv.outputs.keyVaultResourceId
 output logAnalyticsId string = law.outputs.workspaceId
 output backendPrincipalId string = backendApp.outputs.principalId
 output backendFqdn string = backendApp.outputs.fqdn
+output workerPrincipalId string = theoryWorker.outputs.principalId

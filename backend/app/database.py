@@ -29,10 +29,10 @@ def get_engine():
 
     _engine = create_async_engine(
         DATABASE_URL,
-        pool_size=20,
-        max_overflow=10,
-        pool_timeout=30,
-        pool_recycle=1800,
+        pool_size=max(1, settings.DB_POOL_SIZE),
+        max_overflow=max(0, settings.DB_MAX_OVERFLOW),
+        pool_timeout=max(1, settings.DB_POOL_TIMEOUT),
+        pool_recycle=max(60, settings.DB_POOL_RECYCLE),
         echo=False,
     )
     return _engine

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     AZURE_PG_PASSWORD: str = ""
     AZURE_PG_HOST: str = ""
     AZURE_PG_DATABASE: str = "theogen"
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
     
     # Azure Storage
     AZURE_STORAGE_ACCOUNT: str = ""
@@ -68,6 +72,10 @@ class Settings(BaseSettings):
     # Azure Redis (v7.4)
     AZURE_REDIS_HOST: str = ""
     AZURE_REDIS_KEY: str = ""
+    REDIS_SSL_PORT: int = 6380
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
+    THEORY_USE_CELERY: bool = False
     
     # External Managed
     NEO4J_URI: str
@@ -76,6 +84,12 @@ class Settings(BaseSettings):
     
     QDRANT_URL: str
     QDRANT_API_KEY: str = ""
+
+    # Runtime performance controls
+    CODING_FRAGMENT_CONCURRENCY: int = 8
+    THEORY_INTERVIEW_CONCURRENCY: int = 3
+    THEORY_STATUS_POLL_HINT_SECONDS: int = 5
+    THEORY_TASK_LOCK_TTL_SECONDS: int = 1800
     
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""

@@ -132,6 +132,52 @@ class FoundryNeo4jService:
             "category_id": str(category_id)
         })
 
+    async def batch_sync_taxonomy(
+        self,
+        project_id: UUID,
+        categories: list[tuple[UUID, str]],
+        code_category_pairs: list[tuple[UUID, UUID]],
+    ):
+        """
+        Batch sync categories and category->code links using UNWIND.
+        Reduces round-trips during theory generation.
+        """
+        if not self.enabled or not self.driver:
+            return
+
+        pid = str(project_id)
+        async with self.driver.session() as session:
+            if categories:
+                await session.run(
+                    """
+                    UNWIND $cats AS c
+                    MERGE (p:Project {id: $pid})
+                    MERGE (cat:Category {id: c.id})
+                    SET cat.name = c.name
+                    MERGE (p)-[:HAS_CATEGORY]->(cat)
+                    """,
+                    {
+                        "pid": pid,
+                        "cats": [{"id": str(cat_id), "name": name} for cat_id, name in categories],
+                    },
+                )
+
+            if code_category_pairs:
+                await session.run(
+                    """
+                    UNWIND $pairs AS p
+                    MATCH (cat:Category {id: p.category_id})
+                    MATCH (c:Code {id: p.code_id})
+                    MERGE (cat)-[:CONTAINS]->(c)
+                    """,
+                    {
+                        "pairs": [
+                            {"code_id": str(code_id), "category_id": str(category_id)}
+                            for code_id, category_id in code_category_pairs
+                        ]
+                    },
+                )
+
     async def batch_sync_interview(
         self,
         project_id: UUID,

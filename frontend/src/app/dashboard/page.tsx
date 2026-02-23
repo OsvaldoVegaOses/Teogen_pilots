@@ -159,12 +159,14 @@ export default function Dashboard() {
                 return;
             }
 
-            const { task_id } = await enqueueResp.json();
+            const enqueueData = await enqueueResp.json();
+            const { task_id } = enqueueData;
             setTheoryMessage("⏳ Generando teoría... (puede tardar entre 2 y 10 minutos según el volumen de datos)");
 
-            // 2. Poll every 5 seconds until completed or failed (max 10 min)
+            // 2. Poll with adaptive delay until completed or failed (max 10 min)
             let attempts = 0;
             const maxAttempts = 120; // 10 min max
+            let nextDelayMs = Math.max(2000, (enqueueData.next_poll_seconds || 5) * 1000);
             const STEP_LABELS: Record<number, string> = {
                 6:  "Analizando categorías...",
                 12: "Construyendo grafo de conocimiento...",
@@ -175,45 +177,53 @@ export default function Dashboard() {
                 72: "Analizando saturación teórica...",
                 90: "Guardando teoría en base de datos...",
             };
-            const poll = setInterval(async () => {
+            const poll = async () => {
                 attempts++;
                 try {
                     const statusResp = await apiClient(
                         `/projects/${selectedProjectId}/generate-theory/status/${task_id}`
                     );
                     if (!statusResp.ok) {
-                        clearInterval(poll);
                         setTheoryMessage("❌ Error al consultar estado de la tarea.");
                         setGeneratingTheory(false);
                         return;
                     }
                     const taskData = await statusResp.json();
+                    nextDelayMs = Math.max(2000, (taskData.next_poll_seconds || 5) * 1000);
 
                     if (taskData.status === "completed") {
-                        clearInterval(poll);
                         setActiveTheory(taskData.result);
                         setTheoryMessage("✅ Teoría generada correctamente.");
                         setGeneratingTheory(false);
-                    } else if (taskData.status === "failed") {
-                        clearInterval(poll);
+                        return;
+                    }
+                    if (taskData.status === "failed") {
                         setTheoryMessage(`❌ ${taskData.error || "La generación falló."}`);
                         setGeneratingTheory(false);
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(poll);
+                        return;
+                    }
+                    if (attempts >= maxAttempts) {
                         setTheoryMessage("❌ Tiempo de espera agotado (10 min). El proceso continúa en segundo plano — recarga en unos minutos.");
                         setGeneratingTheory(false);
-                    } else {
-                        const elapsed = attempts * 5;
-                        const stepMsg = STEP_LABELS[attempts] ?? "";
-                        const dots = ".".repeat((attempts % 3) + 1);
-                        setTheoryMessage(`⏳ ${stepMsg || `Generando teoría${dots}`} (${elapsed}s / ~10 min máx)`);
+                        return;
                     }
+
+                    const elapsed = attempts * Math.round(nextDelayMs / 1000);
+                    const stepMsg = taskData.step ? `Etapa: ${taskData.step}` : (STEP_LABELS[attempts] ?? "");
+                    const dots = ".".repeat((attempts % 3) + 1);
+                    setTheoryMessage(`⏳ ${stepMsg || `Generando teoría${dots}`} (${elapsed}s / ~10 min máx)`);
+
+                    // Gentle backoff to reduce backend pressure on long jobs.
+                    if (attempts > 12) {
+                        nextDelayMs = Math.min(15000, Math.round(nextDelayMs * 1.15));
+                    }
+                    setTimeout(poll, nextDelayMs);
                 } catch {
-                    clearInterval(poll);
                     setTheoryMessage("❌ Error de conexión al consultar estado.");
                     setGeneratingTheory(false);
                 }
-            }, 5000);
+            };
+            setTimeout(poll, nextDelayMs);
 
         } catch (error) {
             console.error("Error generating theory:", error);

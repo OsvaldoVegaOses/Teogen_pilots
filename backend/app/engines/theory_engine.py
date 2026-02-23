@@ -1,6 +1,7 @@
 # backend/app/engines/theory_engine.py
 from ..services.azure_openai import foundry_openai
 from ..engines.model_router import model_router
+from ..core.json_utils import safe_json_loads
 from ..prompts import (
     CENTRAL_CATEGORY_SYSTEM_PROMPT, 
     get_central_category_user_prompt,
@@ -8,7 +9,6 @@ from ..prompts import (
     get_straussian_build_prompt,
     GAP_ANALYSIS_SYSTEM_PROMPT
 )
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class TheoryGenerationEngine:
             ],
             response_format={"type": "json_object"}
         )
-        return json.loads(response)
+        return safe_json_loads(response)
 
     async def build_straussian_paradigm(self, central_cat: str, other_cats: list) -> dict:
         """Uses Claude 3.5 Sonnet via Model Router to build the structural model."""
@@ -49,7 +49,7 @@ class TheoryGenerationEngine:
             system_prompt=STRAUSSIAN_MODEL_SYSTEM_PROMPT,
             response_format={"type": "json_object"}
         )
-        return json.loads(route_result["result"])
+        return safe_json_loads(route_result["result"])
 
     async def analyze_saturation_and_gaps(self, theory_data: dict) -> dict:
         """Uses o3-mini (MODEL_REASONING_FAST) for logical gap analysis."""
@@ -62,6 +62,6 @@ class TheoryGenerationEngine:
             ],
             response_format={"type": "json_object"}
         )
-        return json.loads(response)
+        return safe_json_loads(response)
 
 theory_engine = TheoryGenerationEngine()
