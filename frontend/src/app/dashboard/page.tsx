@@ -30,6 +30,11 @@ export default function Dashboard() {
     const [loadingTheory, setLoadingTheory] = useState(false);
     const [generatingTheory, setGeneratingTheory] = useState(false);
     const [theoryMessage, setTheoryMessage] = useState("");
+    const [taskProgress, setTaskProgress] = useState<number | null>(null);
+    const [taskStep, setTaskStep] = useState<string>("");
+    const [theoryDone, setTheoryDone] = useState(false);
+    const [theoryFailed, setTheoryFailed] = useState(false);
+    const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
     // Fetch projects from backend
     useEffect(() => {
@@ -88,6 +93,24 @@ export default function Dashboard() {
         fetchTheory();
     }, [selectedProjectId]);
 
+    // Restore in-progress task_id from localStorage after page reload
+    useEffect(() => {
+        if (!selectedProjectId || !isAuthenticated) return;
+        setCurrentTaskId(null);
+        const saved = localStorage.getItem(`theory_task_${selectedProjectId}`);
+        if (!saved) return;
+        try {
+            const { task_id, timestamp } = JSON.parse(saved);
+            if (Date.now() - timestamp > 30 * 60 * 1000) {
+                localStorage.removeItem(`theory_task_${selectedProjectId}`);
+            } else {
+                setCurrentTaskId(task_id);
+            }
+        } catch {
+            localStorage.removeItem(`theory_task_${selectedProjectId}`);
+        }
+    }, [selectedProjectId, isAuthenticated]);
+
     async function handleSync() {
         setLoadingProjects(true);
         try {
@@ -134,11 +157,38 @@ export default function Dashboard() {
         }
     }
 
+    const STEP_DISPLAY: Record<string, string> = {
+        coding:       "Codificando fragmentos de entrevistas...",
+        coding_done:  "Codificación completada",
+        embeddings:   "Generando embeddings semánticos...",
+        neo4j:        "Sincronizando grafo de conocimiento...",
+        theory_engine:"Construyendo teoría fundada...",
+        categories:   "Analizando categorías emergentes...",
+        saturation:   "Verificando saturación teórica...",
+        saving:       "Guardando teoría en base de datos...",
+        completed:    "Teoría completada",
+    };
+
+    function handleExportTheory() {
+        if (!activeTheory) return;
+        const blob = new Blob([JSON.stringify(activeTheory, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `teoria-${selectedProjectId}-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     async function handleGenerateTheory() {
         if (!selectedProjectId || generatingTheory) return;
 
         setGeneratingTheory(true);
-        setTheoryMessage("⏳ Iniciando generación de teoría...");
+        setTheoryDone(false);
+        setTheoryFailed(false);
+        setTaskProgress(0);
+        setTaskStep("");
+        setTheoryMessage("");
 
         try {
             const { apiClient } = await import("@/lib/api");
@@ -161,22 +211,17 @@ export default function Dashboard() {
 
             const enqueueData = await enqueueResp.json();
             const { task_id } = enqueueData;
-            setTheoryMessage("⏳ Generando teoría... (puede tardar entre 2 y 10 minutos según el volumen de datos)");
+            setCurrentTaskId(task_id);
+            localStorage.setItem(
+                `theory_task_${selectedProjectId}`,
+                JSON.stringify({ task_id, timestamp: Date.now() })
+            );
 
             // 2. Poll with adaptive delay until completed or failed (max 10 min)
             let attempts = 0;
-            const maxAttempts = 120; // 10 min max
+            const maxAttempts = 120;
             let nextDelayMs = Math.max(2000, (enqueueData.next_poll_seconds || 5) * 1000);
-            const STEP_LABELS: Record<number, string> = {
-                6:  "Analizando categorías...",
-                12: "Construyendo grafo de conocimiento...",
-                24: "Calculando métricas de red...",
-                36: "Generando embeddings semánticos...",
-                48: "Identificando categoría central...",
-                60: "Construyendo paradigma Straussiano...",
-                72: "Analizando saturación teórica...",
-                90: "Guardando teoría en base de datos...",
-            };
+
             const poll = async () => {
                 attempts++;
                 try {
@@ -184,34 +229,38 @@ export default function Dashboard() {
                         `/projects/${selectedProjectId}/generate-theory/status/${task_id}`
                     );
                     if (!statusResp.ok) {
-                        setTheoryMessage("❌ Error al consultar estado de la tarea.");
+                        setTheoryFailed(true);
+                        setTheoryMessage("Error al consultar estado de la tarea.");
                         setGeneratingTheory(false);
                         return;
                     }
                     const taskData = await statusResp.json();
                     nextDelayMs = Math.max(2000, (taskData.next_poll_seconds || 5) * 1000);
 
+                    if (typeof taskData.progress === "number") setTaskProgress(taskData.progress);
+                    if (taskData.step) setTaskStep(taskData.step);
+
                     if (taskData.status === "completed") {
                         setActiveTheory(taskData.result);
-                        setTheoryMessage("✅ Teoría generada correctamente.");
+                        setTaskProgress(100);
+                        setTheoryDone(true);
                         setGeneratingTheory(false);
+                        localStorage.removeItem(`theory_task_${selectedProjectId}`);
                         return;
                     }
                     if (taskData.status === "failed") {
-                        setTheoryMessage(`❌ ${taskData.error || "La generación falló."}`);
+                        setTheoryFailed(true);
+                        setTheoryMessage(taskData.error || "La generación falló.");
                         setGeneratingTheory(false);
+                        localStorage.removeItem(`theory_task_${selectedProjectId}`);
                         return;
                     }
                     if (attempts >= maxAttempts) {
-                        setTheoryMessage("❌ Tiempo de espera agotado (10 min). El proceso continúa en segundo plano — recarga en unos minutos.");
+                        setTheoryFailed(true);
+                        setTheoryMessage("Tiempo de espera agotado (10 min). El proceso continúa en segundo plano.");
                         setGeneratingTheory(false);
                         return;
                     }
-
-                    const elapsed = attempts * Math.round(nextDelayMs / 1000);
-                    const stepMsg = taskData.step ? `Etapa: ${taskData.step}` : (STEP_LABELS[attempts] ?? "");
-                    const dots = ".".repeat((attempts % 3) + 1);
-                    setTheoryMessage(`⏳ ${stepMsg || `Generando teoría${dots}`} (${elapsed}s / ~10 min máx)`);
 
                     // Gentle backoff to reduce backend pressure on long jobs.
                     if (attempts > 12) {
@@ -219,7 +268,8 @@ export default function Dashboard() {
                     }
                     setTimeout(poll, nextDelayMs);
                 } catch {
-                    setTheoryMessage("❌ Error de conexión al consultar estado.");
+                    setTheoryFailed(true);
+                    setTheoryMessage("Error de conexión al consultar estado.");
                     setGeneratingTheory(false);
                 }
             };
@@ -227,7 +277,8 @@ export default function Dashboard() {
 
         } catch (error) {
             console.error("Error generating theory:", error);
-            setTheoryMessage("❌ Error de conexión al generar teoría.");
+            setTheoryFailed(true);
+            setTheoryMessage("Error de conexión al generar teoría.");
             setGeneratingTheory(false);
         }
     }
@@ -342,7 +393,7 @@ export default function Dashboard() {
 
                                 {/* Show active theory if available */}
                                 {activeTheory && (
-                                    <div className="col-span-2 mt-8">
+                                    <div id="theory-viewer" className="col-span-2 mt-8">
                                         {/* Import dynamically to avoid SSR issues if necessary, strictly client-side here */}
                                         {(() => {
                                             const TheoryViewer = require("@/components/TheoryViewer").default;
@@ -360,24 +411,110 @@ export default function Dashboard() {
                                             onUploadSuccess={() => console.log("Refresh list...")}
                                         />
 
-                                        {!activeTheory && (
-                                            <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
-                                                <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
-                                                <p className="text-white/80 text-sm mb-6">
-                                                    Analiza los datos del proyecto seleccionado para buscar patrones emergentes.
-                                                </p>
-                                                <button
-                                                    className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:scale-102 hover:bg-indigo-50 active:scale-98"
-                                                    onClick={handleGenerateTheory}
-                                                    disabled={generatingTheory}
-                                                >
-                                                    {generatingTheory ? "Generando teoría..." : "Generar Teoría (v1.2)"}
-                                                </button>
-                                                {theoryMessage && (
-                                                    <p className="mt-3 text-xs font-medium text-white/90">{theoryMessage}</p>
-                                                )}
-                                            </div>
-                                        )}
+                                        <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
+                                            <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
+
+                                            {/* Idle */}
+                                            {!generatingTheory && !theoryDone && !theoryFailed && (
+                                                <>
+                                                    <p className="text-white/80 text-sm mb-6">
+                                                        {activeTheory
+                                                            ? "Teoría anterior disponible. Puedes regenerarla con los datos actuales."
+                                                            : "Analiza los datos del proyecto para buscar patrones emergentes."}
+                                                    </p>
+                                                    {activeTheory && (
+                                                        <div className="flex gap-2 mb-3">
+                                                            <button
+                                                                onClick={() => setTimeout(() => document.getElementById("theory-viewer")?.scrollIntoView({ behavior: "smooth" }), 50)}
+                                                                className="flex-1 rounded-xl bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
+                                                            >
+                                                                Ver Teoría
+                                                            </button>
+                                                            <button
+                                                                onClick={handleExportTheory}
+                                                                className="flex-1 rounded-xl border border-white/40 py-2.5 text-sm font-bold text-white hover:bg-white/10 transition-all"
+                                                            >
+                                                                Exportar JSON
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:bg-indigo-50 active:scale-98"
+                                                        onClick={handleGenerateTheory}
+                                                    >
+                                                        {activeTheory ? "Regenerar Teoría" : "Generar Teoría (v1.2)"}
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {/* Generating — progress bar */}
+                                            {generatingTheory && (
+                                                <div>
+                                                    <p className="text-white/80 text-sm mb-3">
+                                                        {STEP_DISPLAY[taskStep] || "Procesando datos..."}
+                                                    </p>
+                                                    <div className="mb-3">
+                                                        <div className="flex justify-between text-xs font-semibold text-white/70 mb-1">
+                                                            <span>{taskStep || "iniciando"}</span>
+                                                            <span>{taskProgress ?? 0}%</span>
+                                                        </div>
+                                                        <div className="h-2 w-full rounded-full bg-white/20 overflow-hidden">
+                                                            <div
+                                                                className="h-full rounded-full bg-white transition-all duration-700 ease-out"
+                                                                style={{ width: `${taskProgress ?? 0}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    {currentTaskId && (
+                                                        <p className="text-xs text-white/40 font-mono truncate">
+                                                            task: {currentTaskId}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Done */}
+                                            {theoryDone && (
+                                                <div>
+                                                    <p className="text-white/90 text-sm mb-4">
+                                                        ✅ Teoría generada. Lista para revisar y exportar.
+                                                    </p>
+                                                    <div className="flex gap-2 mb-2">
+                                                        <button
+                                                            onClick={() => setTimeout(() => document.getElementById("theory-viewer")?.scrollIntoView({ behavior: "smooth" }), 50)}
+                                                            className="flex-1 rounded-xl bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
+                                                        >
+                                                            Ver Teoría
+                                                        </button>
+                                                        <button
+                                                            onClick={handleExportTheory}
+                                                            className="flex-1 rounded-xl border border-white/40 py-2.5 text-sm font-bold text-white hover:bg-white/10 transition-all"
+                                                        >
+                                                            Exportar JSON
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => { setTheoryDone(false); setTaskProgress(null); setTaskStep(""); }}
+                                                        className="w-full text-xs text-white/40 hover:text-white/70 transition-colors py-1"
+                                                    >
+                                                        Regenerar
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Failed */}
+                                            {theoryFailed && (
+                                                <div>
+                                                    <p className="text-white/80 text-sm mb-4">{theoryMessage || "La generación falló."}</p>
+                                                    <button
+                                                        onClick={() => { setTheoryFailed(false); setTheoryMessage(""); setTaskProgress(null); setTaskStep(""); handleGenerateTheory(); }}
+                                                        className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
+                                                    >
+                                                        Reintentar
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </>
                                 ) : (
                                     <div className="p-8 text-center border-2 border-dashed rounded-3xl border-zinc-200 bg-zinc-50/50">

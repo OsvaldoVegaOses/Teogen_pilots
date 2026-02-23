@@ -46,11 +46,10 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
           value: s.value
         }]
       )
-      registries: [for r in registries: {
-        server: r.server
-        username: r.username
-        passwordSecretRef: r.passwordSecretRef
-      }]
+      registries: [for r in registries: union(
+        { server: r.server },
+        contains(r, 'identity') ? { identity: r.identity } : { username: r.username, passwordSecretRef: r.passwordSecretRef }
+      )]
       ingress: enableIngress ? {
         external: ingressExternal
         targetPort: targetPort

@@ -39,8 +39,7 @@ module backendApp '../modules/containerapp.bicep' = {
     registries: [
       {
         server: 'ca39bdb671caacr.azurecr.io'
-        username: ''
-        passwordSecretRef: ''
+        identity: 'system'
       }
     ]
     additionalEnv: [
