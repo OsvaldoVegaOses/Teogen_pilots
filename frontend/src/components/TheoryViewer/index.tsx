@@ -6,14 +6,9 @@ interface Theory {
     version: number;
     generated_by: string;
     confidence_score: number;
-    model_json: {
-        selected_central_category: string;
-        conditions: string;
-        actions: string;
-        consequences: string;
-    };
-    propositions: string[];
-    gaps: string[];
+    model_json: Record<string, any>;
+    propositions: any[];
+    gaps: any[];
 }
 
 interface TheoryViewerProps {
@@ -24,6 +19,52 @@ interface TheoryViewerProps {
 
 export default function TheoryViewer({ projectId, theory, onExportComplete }: TheoryViewerProps) {
     const [isExporting, setIsExporting] = useState(false);
+
+    const toDisplayText = (value: any): string => {
+        if (value == null) return "";
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+        }
+        if (Array.isArray(value)) {
+            return value.map((v) => toDisplayText(v)).filter(Boolean).join(" · ");
+        }
+
+        // Known theory payload shapes
+        if (typeof value === "object") {
+            if (value.name && value.evidence) return `${value.name}: ${toDisplayText(value.evidence)}`;
+            if (value.gap_description) return toDisplayText(value.gap_description);
+            if (value.theoretical_model_description) return toDisplayText(value.theoretical_model_description);
+            if (value.selected_central_category) return toDisplayText(value.selected_central_category);
+            if (value.central_phenomenon?.name) return toDisplayText(value.central_phenomenon.name);
+            if (value.definition) return `${toDisplayText(value.name || "")}${value.name ? ": " : ""}${toDisplayText(value.definition)}`;
+            if (value.evidence) return toDisplayText(value.evidence);
+            if (value.description) return toDisplayText(value.description);
+            if (value.id && value.name) return `${toDisplayText(value.name)} (${toDisplayText(value.id)})`;
+            return JSON.stringify(value);
+        }
+
+        return String(value);
+    };
+
+    const centralCategory =
+        toDisplayText(theory?.model_json?.selected_central_category) ||
+        toDisplayText(theory?.model_json?.central_phenomenon?.name) ||
+        "No disponible";
+
+    const conditionsText =
+        toDisplayText(theory?.model_json?.conditions) ||
+        toDisplayText(theory?.model_json?.causal_conditions) ||
+        "No disponible";
+
+    const actionsText =
+        toDisplayText(theory?.model_json?.actions) ||
+        toDisplayText(theory?.model_json?.action_strategies) ||
+        "No disponible";
+
+    const consequencesText =
+        toDisplayText(theory?.model_json?.consequences) ||
+        toDisplayText(theory?.model_json?.consequences) ||
+        "No disponible";
 
     const handleExport = async () => {
         setIsExporting(true);
@@ -99,22 +140,22 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
                     <div className="bg-indigo-50 dark:bg-indigo-900/10 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
                         <div className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-1">Categoría Central</div>
                         <div className="text-xl font-bold text-indigo-900 dark:text-indigo-200">
-                            {theory.model_json.selected_central_category}
+                            {centralCategory}
                         </div>
                     </div>
 
                     <div className="grid gap-4 text-sm">
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Condiciones</span>
-                            {theory.model_json.conditions}
+                            {conditionsText}
                         </div>
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Acciones / Interacciones</span>
-                            {theory.model_json.actions}
+                            {actionsText}
                         </div>
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Consecuencias</span>
-                            {theory.model_json.consequences}
+                            {consequencesText}
                         </div>
                     </div>
                 </div>
@@ -129,7 +170,7 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
                                     {idx + 1}
                                 </span>
                                 <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-sm">
-                                    {prop}
+                                    {toDisplayText(prop)}
                                 </p>
                             </li>
                         ))}
@@ -142,7 +183,7 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
                             </h4>
                             <ul className="list-disc list-inside text-sm text-zinc-500 space-y-1 pl-2">
                                 {theory.gaps.map((gap, i) => (
-                                    <li key={i}>{gap}</li>
+                                    <li key={i}>{toDisplayText(gap)}</li>
                                 ))}
                             </ul>
                         </div>
