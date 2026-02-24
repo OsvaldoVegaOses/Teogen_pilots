@@ -7,6 +7,14 @@ import { useRouter } from "next/navigation";
 import InterviewUpload from "@/components/InterviewUpload";
 import MemoManager from "@/components/MemoManager";
 import CodeExplorer from "@/components/CodeExplorer";
+import TheoryViewer from "@/components/TheoryViewer";
+
+const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
+type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
+
+function isDomainTemplate(value: string): value is DomainTemplate {
+    return (DOMAIN_TEMPLATES as readonly string[]).includes(value);
+}
 
 export default function Dashboard() {
     const { instance, accounts, inProgress } = useMsal();
@@ -37,6 +45,7 @@ export default function Dashboard() {
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
     const [logLines, setLogLines] = useState<string[]>([]);
     const prevStepRef = useRef<string>("");
+    const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
 
     // Fetch projects from backend
     useEffect(() => {
@@ -132,6 +141,16 @@ export default function Dashboard() {
     async function handleCreateProject() {
         const name = prompt("Nombre del nuevo proyecto:");
         if (!name) return;
+        const templateInput = prompt(
+            "Plantilla de dominio (generic, education, ngo, government, market_research):",
+            "generic"
+        );
+        if (templateInput === null) return;
+        const domainTemplate = templateInput.trim().toLowerCase() || "generic";
+        if (!isDomainTemplate(domainTemplate)) {
+            alert("Plantilla no válida. Usa: generic, education, ngo, government, market_research.");
+            return;
+        }
 
         try {
             const { apiClient } = await import("@/lib/api");
@@ -141,6 +160,7 @@ export default function Dashboard() {
                     name,
                     description: "Proyecto de investigación",
                     methodological_profile: "constructivist",
+                    domain_template: domainTemplate,
                     language: "es"
                 })
             });
@@ -159,9 +179,69 @@ export default function Dashboard() {
         }
     }
 
+    async function handleEditProject() {
+        if (!selectedProjectId || !selectedProject) return;
+
+        const nameInput = prompt("Nuevo nombre del proyecto:", selectedProject.name || "");
+        if (nameInput === null) return;
+        const name = nameInput.trim();
+        if (!name) {
+            alert("El nombre no puede estar vacio.");
+            return;
+        }
+
+        const templateInput = prompt(
+            "Plantilla de dominio (generic, education, ngo, government, market_research):",
+            selectedProject.domain_template || "generic"
+        );
+        if (templateInput === null) return;
+        const domainTemplate = templateInput.trim().toLowerCase() || "generic";
+        if (!isDomainTemplate(domainTemplate)) {
+            alert("Plantilla no valida. Usa: generic, education, ngo, government, market_research.");
+            return;
+        }
+
+        const descriptionInput = prompt("Descripcion del proyecto:", selectedProject.description || "");
+        if (descriptionInput === null) return;
+
+        try {
+            const { apiClient } = await import("@/lib/api");
+            const response = await apiClient(`/projects/${selectedProjectId}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                    name,
+                    description: descriptionInput,
+                    domain_template: domainTemplate,
+                }),
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                alert(`Error al actualizar proyecto: ${errData.detail || response.statusText}`);
+                return;
+            }
+
+            const updatedProject = await response.json();
+            setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+        } catch (error) {
+            console.error("Project update error:", error);
+            alert("Error de conexion al actualizar proyecto");
+        }
+    }
+
     const STEP_DISPLAY: Record<string, string> = {
         queued:        "En cola...",
         pipeline_start:"Iniciando pipeline...",
+        load_project:  "Cargando proyecto...",
+        load_categories: "Cargando categorías...",
+        auto_code:     "Auto-codificando entrevistas...",
+        neo4j_taxonomy_sync: "Sincronizando taxonomía en Neo4j...",
+        network_metrics: "Calculando métricas de red...",
+        semantic_evidence: "Recuperando evidencia semántica...",
+        identify_central_category: "Identificando categoría central...",
+        build_straussian_paradigm: "Construyendo paradigma...",
+        analyze_saturation_and_gaps: "Analizando brechas y saturación...",
+        save_theory:   "Guardando teoría...",
         coding:        "Codificando fragmentos de entrevistas...",
         coding_done:   "Codificación completada",
         embeddings:    "Generando embeddings semánticos...",
@@ -352,6 +432,13 @@ export default function Dashboard() {
                             Sincronizar Cloud
                         </button>
                         <button
+                            onClick={handleEditProject}
+                            disabled={!selectedProjectId}
+                            className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed dark:border-zinc-800 dark:text-white"
+                        >
+                            Editar Proyecto
+                        </button>
+                        <button
                             onClick={handleCreateProject}
                             className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
                         >
@@ -411,11 +498,7 @@ export default function Dashboard() {
                                 {/* Show active theory if available */}
                                 {activeTheory && (
                                     <div id="theory-viewer" className="col-span-2 mt-8">
-                                        {/* Import dynamically to avoid SSR issues if necessary, strictly client-side here */}
-                                        {(() => {
-                                            const TheoryViewer = require("@/components/TheoryViewer").default;
-                                            return <TheoryViewer projectId={selectedProjectId!} theory={activeTheory} />;
-                                        })()}
+                                        <TheoryViewer projectId={selectedProjectId!} theory={activeTheory} />
                                     </div>
                                 )}
                             </div>
@@ -570,3 +653,9 @@ export default function Dashboard() {
         </div>
     );
 }
+
+
+
+
+
+

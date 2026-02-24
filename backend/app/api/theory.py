@@ -10,22 +10,18 @@ from json import JSONDecodeError
 from typing import Any, Dict, List, Optional, Set
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import CurrentUser, get_current_user
 from ..core.settings import settings
 from ..database import get_db, get_session_local
-from ..engines.coding_engine import coding_engine
-from ..engines.theory_engine import theory_engine
-from ..models.models import Category, Code, Project, Theory
+from ..engines.theory_pipeline import TheoryPipeline, TheoryPipelineError
+from ..models.models import Project, Theory
 from ..schemas.theory import TheoryGenerateRequest, TheoryResponse
-from ..services.azure_openai import foundry_openai
 from ..services.export_service import export_service
-from ..services.neo4j_service import neo4j_service
-from ..services.qdrant_service import qdrant_service
 from ..services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
@@ -38,6 +34,8 @@ _LOCK_PREFIX = "theory_lock:"
 _redis_client = None
 _theory_tasks: Dict[str, Dict[str, Any]] = {}
 _background_tasks: Set[asyncio.Task] = set()
+_local_pipeline_semaphore = asyncio.Semaphore(max(1, settings.THEORY_LOCAL_MAX_CONCURRENT_TASKS))
+theory_pipeline = TheoryPipeline()
 
 
 def _use_celery_mode() -> bool:
@@ -194,55 +192,8 @@ async def _release_project_lock(project_id: UUID, task_id: str) -> None:
         logger.warning("Redis lock release failed for project %s: %s", project_id, e)
 
 
-def _t(label: str, task_id: str, t0: float) -> float:
-    elapsed = time.perf_counter() - t0
-    logger.info("[theory][%s] step=%s elapsed=%.2fs", task_id, label, elapsed)
-    return time.perf_counter()
-
-
 async def _mark_step(task_id: str, step: str, progress: int) -> None:
     await _set_task_state(task_id, step=step, progress=progress)
-
-
-def _slim_cats_for_llm(cats_data: list, network_metrics: dict) -> list:
-    """Return a token-safe slice of cats_data, sorted by network centrality.
-
-    - Caps to THEORY_MAX_CATS_FOR_LLM categories (most central first).
-    - Caps evidence fragments per category and truncates fragment text.
-    - Does NOT mutate the original list.
-    """
-    centrality_rank: dict[str, int] = {
-        item.get("category_id", ""): idx
-        for idx, item in enumerate(network_metrics.get("category_centrality", []))
-    }
-    sorted_cats = sorted(cats_data, key=lambda c: centrality_rank.get(c["id"], 9999))
-    result = []
-    for cat in sorted_cats[:settings.THEORY_MAX_CATS_FOR_LLM]:
-        frags_slimmed = []
-        for frag in cat.get("semantic_evidence", [])[:settings.THEORY_MAX_EVIDENCE_FRAGS]:
-            if isinstance(frag, dict) and "text" in frag:
-                frag = {**frag, "text": frag["text"][:settings.THEORY_MAX_FRAG_CHARS]}
-            frags_slimmed.append(frag)
-        result.append({**cat, "semantic_evidence": frags_slimmed})
-    return result
-
-
-def _slim_network_for_llm(network_metrics: dict) -> dict:
-    """Return network_metrics with list sizes capped to THEORY_MAX_NETWORK_TOP."""
-    top_n = settings.THEORY_MAX_NETWORK_TOP
-    return {
-        "counts": network_metrics.get("counts", {}),
-        "category_centrality": network_metrics.get("category_centrality", [])[:top_n],
-        "category_cooccurrence": network_metrics.get("category_cooccurrence", [])[:top_n],
-    }
-
-
-def _cats_no_evidence(cats_data: list) -> list:
-    """Strip semantic_evidence for the Straussian build call (evidence already consumed in step 1)."""
-    return [
-        {"id": c["id"], "name": c["name"], "description": c.get("description", "")}
-        for c in cats_data
-    ]
 
 
 async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, request: TheoryGenerateRequest):
@@ -250,9 +201,10 @@ async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, 
     logger.info("[theory] task %s STARTED for project %s", task_id, project_id)
     await _set_task_state(task_id, status_value="running", step="pipeline_start", progress=2)
     try:
-        session_local = get_session_local()
-        async with session_local() as db:
-            await _theory_pipeline(task_id, project_id, user_uuid, request, db)
+        async with _local_pipeline_semaphore:
+            session_local = get_session_local()
+            async with session_local() as db:
+                await _theory_pipeline(task_id, project_id, user_uuid, request, db)
     except (MultipleResultsFound, JSONDecodeError) as e:
         logger.exception("[theory] task %s failed with known data error", task_id)
         await _set_task_state(
@@ -398,250 +350,17 @@ async def _theory_pipeline(
     request: TheoryGenerateRequest,
     db: AsyncSession,
 ):
-    pipeline_start = time.perf_counter()
-    t0 = pipeline_start
-
-    await _mark_step(task_id, "load_project", 5)
-    project_result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.owner_id == user_uuid)
-    )
-    project = project_result.scalar_one_or_none()
-    if not project:
-        await _set_task_state(
-            task_id,
-            status_value="failed",
-            step="load_project",
-            progress=100,
-            error="Project not found",
-            error_code="NOT_FOUND",
-        )
-        return
-    t0 = _t("load_project", task_id, t0)
-
-    await _mark_step(task_id, "load_categories", 10)
-    cat_result = await db.execute(select(Category).filter(Category.project_id == project_id))
-    categories = cat_result.scalars().all()
-    t0 = _t("load_categories", task_id, t0)
-
-    if len(categories) < 2:
-        code_exists_result = await db.execute(
-            select(Code.id).where(Code.project_id == project_id).limit(1)
-        )
-
-        if code_exists_result.first() is None:
-            from ..models.models import Interview
-
-            completed_interviews_result = await db.execute(
-                select(Interview).where(
-                    Interview.project_id == project_id,
-                    Interview.transcription_status == "completed",
-                    Interview.full_text.isnot(None),
-                )
-            )
-            completed_interviews = completed_interviews_result.scalars().all()
-            await _mark_step(task_id, "auto_code", 25)
-
-            t_ac = time.perf_counter()
-            session_local = get_session_local()
-            sem = asyncio.Semaphore(max(1, settings.THEORY_INTERVIEW_CONCURRENCY))
-
-            async def _code_interview(iv_id):
-                async with sem:
-                    async with session_local() as iv_db:
-                        await coding_engine.auto_code_interview(project_id, iv_id, iv_db)
-
-            await asyncio.gather(*[_code_interview(iv.id) for iv in completed_interviews])
-            logger.info(
-                "[theory][%s] auto_code interviews=%d elapsed=%.2fs",
-                task_id,
-                len(completed_interviews),
-                time.perf_counter() - t_ac,
-            )
-            await _refresh_project_lock(project_id, task_id)
-
-        code_result = await db.execute(select(Code).filter(Code.project_id == project_id))
-        codes_for_bootstrap = code_result.scalars().all()
-
-        if len(codes_for_bootstrap) >= 2:
-            category_by_label = {c.name.strip().lower(): c for c in categories if c.name}
-
-            for code in codes_for_bootstrap:
-                if code.category_id:
-                    continue
-                label = (code.label or "").strip()
-                if not label:
-                    continue
-
-                key = label.lower()
-                category = category_by_label.get(key)
-                if not category:
-                    category = Category(
-                        project_id=project_id,
-                        name=label[:500],
-                        definition="Auto-generada desde codigos durante teorizacion",
-                        created_at=datetime.utcnow(),
-                    )
-                    db.add(category)
-                    await db.flush()
-                    category_by_label[key] = category
-
-                code.category_id = category.id
-
-            await db.commit()
-            cat_result = await db.execute(select(Category).filter(Category.project_id == project_id))
-            categories = cat_result.scalars().all()
-
-    if len(categories) < 2:
-        from ..models.models import Interview
-
-        interviews_total = (
-            await db.execute(select(func.count()).select_from(Interview).where(Interview.project_id == project_id))
-        ).scalar() or 0
-
-        interviews_completed = (
-            await db.execute(
-                select(func.count())
-                .select_from(Interview)
-                .where(Interview.project_id == project_id, Interview.transcription_status == "completed")
-            )
-        ).scalar() or 0
-
-        codes_total = (
-            await db.execute(select(func.count()).select_from(Code).where(Code.project_id == project_id))
-        ).scalar() or 0
-
-        await _set_task_state(
-            task_id,
-            status_value="failed",
-            step="validate_categories",
-            progress=100,
-            error=(
-                "No hay suficientes categorias para teorizacion (minimo 2). "
-                f"Estado actual: entrevistas={interviews_total}, entrevistas_completadas={interviews_completed}, "
-                f"codigos={codes_total}, categorias={len(categories)}."
-            ),
-            error_code="INSUFFICIENT_CATEGORIES",
-        )
-        return
-
-    await _mark_step(task_id, "neo4j_taxonomy_sync", 45)
-    await neo4j_service.ensure_project_node(project_id, project.name)
-
-    code_result = await db.execute(select(Code).filter(Code.project_id == project_id))
-    codes = code_result.scalars().all()
-    await neo4j_service.batch_sync_taxonomy(
-        project_id=project_id,
-        categories=[(cat.id, cat.name) for cat in categories],
-        code_category_pairs=[(code.id, code.category_id) for code in codes if code.category_id],
-    )
-    t0 = _t("neo4j_taxonomy_sync", task_id, t0)
-
+    started = time.perf_counter()
     try:
-        cats_data = [
-            {"id": str(c.id), "name": c.name, "description": c.definition or ""}
-            for c in categories
-        ]
-
-        await _mark_step(task_id, "network_metrics", 60)
-        t0 = time.perf_counter()
-        network_metrics = await neo4j_service.get_project_network_metrics(project_id)
-        t0 = _t("network_metrics", task_id, t0)
-
-        await _mark_step(task_id, "semantic_evidence", 70)
-        category_by_id = {str(c.id): c for c in categories}
-        top_categories = [
-            (item.get("category_id"), category_by_id.get(item.get("category_id")))
-            for item in network_metrics.get("category_centrality", [])[:3]
-            if category_by_id.get(item.get("category_id"))
-        ]
-
-        async def _fetch_evidence(category_id: str, category_obj):
-            query_text = f"{category_obj.name}. {category_obj.definition or ''}".strip()
-            embeddings = await foundry_openai.generate_embeddings([query_text])
-            if not embeddings:
-                return None
-            fragments = await qdrant_service.search_supporting_fragments(
-                project_id=project_id,
-                query_vector=embeddings[0],
-                limit=3,
-            )
-            return {
-                "category_id": category_id,
-                "category_name": category_obj.name,
-                "fragments": fragments,
-            }
-
-        evidence_results = await asyncio.gather(
-            *[_fetch_evidence(cid, cobj) for cid, cobj in top_categories],
-            return_exceptions=False,
-        )
-        semantic_evidence = [r for r in evidence_results if r is not None]
-
-        evidence_by_category = {
-            item["category_id"]: item["fragments"] for item in semantic_evidence
-        }
-        for cat in cats_data:
-            cat["semantic_evidence"] = evidence_by_category.get(cat["id"], [])
-
-        await _mark_step(task_id, "identify_central_category", 80)
-        cats_slim = _slim_cats_for_llm(cats_data, network_metrics)
-        network_slim = _slim_network_for_llm(network_metrics)
-        logger.info(
-            "[theory][%s] context-slim: cats %d→%d evidence_frags<=%d frag_chars<=%d network_top=%d",
-            task_id, len(cats_data), len(cats_slim),
-            settings.THEORY_MAX_EVIDENCE_FRAGS, settings.THEORY_MAX_FRAG_CHARS,
-            settings.THEORY_MAX_NETWORK_TOP,
-        )
-        central_cat_data = await theory_engine.identify_central_category(cats_slim, network_slim)
-
-        await _mark_step(task_id, "build_straussian_paradigm", 87)
-        # Pass cats without evidence — evidence was already used in step 1 (identify_central_category).
-        # This avoids re-sending thousands of tokens of raw interview text.
-        paradigm = await theory_engine.build_straussian_paradigm(
-            central_cat_data["selected_central_category"],
-            _cats_no_evidence(cats_slim),
-        )
-
-        await _mark_step(task_id, "analyze_saturation_and_gaps", 93)
-        gaps = await theory_engine.analyze_saturation_and_gaps(paradigm)
-
-        await _mark_step(task_id, "save_theory", 97)
-        new_theory = Theory(
+        result_payload = await theory_pipeline.run(
+            task_id=task_id,
             project_id=project_id,
-            model_json=paradigm,
-            propositions=paradigm.get("propositions", []),
-            validation={
-                "gap_analysis": gaps,
-                "network_metrics_summary": {
-                    "counts": network_metrics.get("counts", {}),
-                    "category_centrality_top": network_metrics.get("category_centrality", [])[:5],
-                    "category_cooccurrence_top": network_metrics.get("category_cooccurrence", [])[:5],
-                    "semantic_evidence_top": semantic_evidence,
-                },
-            },
-            gaps=gaps.get("identified_gaps", []),
-            confidence_score=paradigm.get("confidence_score", 0.7),
-            generated_by="DeepSeek-V3.2-Speciale/Kimi-K2.5",
-            status="completed",
+            user_uuid=user_uuid,
+            request=request,
+            db=db,
+            mark_step=lambda step, progress: _mark_step(task_id, step, progress),
+            refresh_lock=lambda: _refresh_project_lock(project_id, task_id),
         )
-
-        db.add(new_theory)
-        await db.commit()
-        await db.refresh(new_theory)
-
-        result_payload = {
-            "id": str(new_theory.id),
-            "project_id": str(new_theory.project_id),
-            "version": new_theory.version,
-            "status": new_theory.status,
-            "confidence_score": new_theory.confidence_score,
-            "generated_by": new_theory.generated_by,
-            "model_json": new_theory.model_json,
-            "propositions": new_theory.propositions,
-            "gaps": new_theory.gaps,
-            "validation": new_theory.validation,
-            "created_at": new_theory.created_at.isoformat() if new_theory.created_at else None,
-        }
         await _set_task_state(
             task_id,
             status_value="completed",
@@ -650,15 +369,17 @@ async def _theory_pipeline(
             result=result_payload,
         )
         await _refresh_project_lock(project_id, task_id)
-
-        total_pipeline = time.perf_counter() - pipeline_start
-        logger.info(
-            "[theory][%s] completed theory_id=%s total_pipeline=%.1fs",
+        logger.info("[theory][%s] completed in %.1fs", task_id, time.perf_counter() - started)
+    except TheoryPipelineError as e:
+        await db.rollback()
+        await _set_task_state(
             task_id,
-            new_theory.id,
-            total_pipeline,
+            status_value="failed",
+            step="failed",
+            progress=100,
+            error=e.message,
+            error_code=e.code,
         )
-
     except Exception as e:
         await db.rollback()
         await _set_task_state(
@@ -669,7 +390,6 @@ async def _theory_pipeline(
             error=f"Theory generation failed: {str(e)}",
             error_code="PIPELINE_ERROR",
         )
-
 
 @router.get("/{project_id}/theories", response_model=List[TheoryResponse])
 async def list_theories(
@@ -691,6 +411,7 @@ async def list_theories(
 async def export_theory_report(
     project_id: UUID,
     theory_id: UUID,
+    format: str = Query("pdf", pattern="^(pdf|pptx|xlsx|png)$"),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -717,20 +438,24 @@ async def export_theory_report(
             "model_json": theory.model_json,
             "propositions": theory.propositions,
             "gaps": theory.gaps,
+            "validation": theory.validation,
         }
 
-        pdf_buffer = await export_service.generate_theory_pdf(
+        report_buffer, extension, content_type = await export_service.generate_theory_report(
             project_name=project.name,
             language=project.language or "es",
             theory_data=theory_dict,
+            format=format,
+            template_key=getattr(project, "domain_template", "generic") or "generic",
         )
 
-        blob_name = f"{project_id}/reports/Theory_{theory_id}_{uuid.uuid4().hex[:8]}.pdf"
+        blob_name = f"{project_id}/reports/Theory_{theory_id}_{uuid.uuid4().hex[:8]}.{extension}"
 
         await storage_service.upload_blob(
             container_key="exports",
             blob_name=blob_name,
-            data=pdf_buffer.getvalue(),
+            data=report_buffer.getvalue(),
+            content_type=content_type,
         )
 
         download_url = await storage_service.generate_sas_url(
@@ -741,10 +466,12 @@ async def export_theory_report(
 
         return {
             "download_url": download_url,
-            "filename": f"TheoGen_{project.name.replace(' ', '_')}.pdf",
+            "filename": f"TheoGen_{project.name.replace(' ', '_')}.{extension}",
             "expires_at_utc": "1h",
+            "format": extension,
         }
 
     except Exception as e:
         logger.error("Failed to export report: %s", e)
         raise HTTPException(status_code=500, detail="Failed to generate or upload report")
+

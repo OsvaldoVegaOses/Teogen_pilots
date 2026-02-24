@@ -148,11 +148,17 @@ class FoundryQdrantService:
         evidence = []
         for hit in hits:
             payload = hit.payload or {}
+            metadata = {
+                "codes": payload.get("codes", []),
+                "project_id": payload.get("project_id"),
+            }
             evidence.append({
+                "id": str(hit.id),
                 "fragment_id": str(hit.id),
                 "score": float(hit.score),
                 "text": payload.get("text", ""),
                 "codes": payload.get("codes", []),
+                "metadata": metadata,
             })
         return evidence
 

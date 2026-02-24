@@ -1,0 +1,5 @@
+FQDN= theogen-backend--fix-260223-1131.gentlemoss-dcba183f.eastus.azurecontainerapps.io
+AZURE_AD_CLIENT_ID= c6d2cf71-dcd2-4400-a8be-9eb8c16b1174
+Trying az account get-access-token --resource c6d2cf71-dcd2-4400-a8be-9eb8c16b1174
+Trying az account get-access-token --resource api://c6d2cf71-dcd2-4400-a8be-9eb8c16b1174
+Failed to obtain access token via az CLI for the app

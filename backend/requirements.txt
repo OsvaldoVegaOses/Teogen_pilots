@@ -29,6 +29,10 @@ pandas
 numpy
 tenacity
 reportlab
+python-pptx
+openpyxl
+Pillow
+tiktoken
 json-repair
 pytest
 pytest-asyncio

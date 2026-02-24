@@ -1,5 +1,6 @@
 
 import logging
+import uuid
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
@@ -305,11 +306,132 @@ class FoundryNeo4jService:
         if counts.get("category_count", 0) == 0:
             raise ValueError(f"No category nodes found in Neo4j for project {project_id_str}")
 
+        gds_meta: Dict[str, Any] = {"enabled": False}
+        pagerank_by_id: Dict[str, float] = {}
+        degree_by_id: Dict[str, float] = {}
+
+        # Optional: use Neo4j Graph Data Science if installed.
+        # Falls back silently to Cypher-only metrics if GDS procedures are unavailable.
+        try:
+            if self.enabled and self.driver:
+                graph_name = f"theogen_cat_{project_id_str.replace('-', '')[:8]}_{uuid.uuid4().hex[:6]}"
+                graph_created = False
+                node_query = """
+                MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(cat:Category)
+                RETURN id(cat) AS id, cat.id AS category_id, cat.name AS category_name
+                """
+                rel_query = """
+                MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[:CONTAINS]->(:Code)-[:APPLIES_TO]->(f:Fragment)<-[:APPLIES_TO]-(:Code)<-[:CONTAINS]-(c2:Category)
+                WHERE id(c1) < id(c2)
+                WITH id(c1) AS source, id(c2) AS target, count(DISTINCT f) AS weight
+                RETURN source, target, toFloat(weight) AS weight
+                """
+
+                async with self.driver.session() as session:
+                    # Detect GDS availability.
+                    await session.run("CALL gds.version() YIELD version RETURN version")
+
+                    try:
+                        await session.run(
+                            """
+                            CALL gds.graph.project.cypher(
+                              $graph_name,
+                              $node_query,
+                              $rel_query,
+                              {validateRelationships: false}
+                            )
+                            YIELD graphName, nodeCount, relationshipCount
+                            """,
+                            {
+                                "graph_name": graph_name,
+                                "project_id": project_id_str,
+                                "node_query": node_query,
+                                "rel_query": rel_query,
+                            },
+                        )
+                        graph_created = True
+
+                        pr_res = await session.run(
+                            """
+                            CALL gds.pageRank.stream($graph_name, {relationshipWeightProperty: 'weight'})
+                            YIELD nodeId, score
+                            RETURN gds.util.asNode(nodeId).id AS category_id,
+                                   gds.util.asNode(nodeId).name AS category_name,
+                                   score
+                            ORDER BY score DESC
+                            """,
+                            {"graph_name": graph_name},
+                        )
+                        pagerank_rows = await pr_res.data()
+
+                        deg_res = await session.run(
+                            """
+                            CALL gds.degree.stream($graph_name, {relationshipWeightProperty: 'weight'})
+                            YIELD nodeId, score
+                            RETURN gds.util.asNode(nodeId).id AS category_id,
+                                   gds.util.asNode(nodeId).name AS category_name,
+                                   score
+                            ORDER BY score DESC
+                            """,
+                            {"graph_name": graph_name},
+                        )
+                        degree_rows = await deg_res.data()
+                    finally:
+                        if graph_created:
+                            try:
+                                await session.run(
+                                    "CALL gds.graph.drop($graph_name, false)",
+                                    {"graph_name": graph_name},
+                                )
+                            except Exception:
+                                # Best-effort cleanup; do not fail the request for a drop issue.
+                                pass
+
+                pagerank_by_id = {
+                    str(r.get("category_id", "")): float(r.get("score", 0.0))
+                    for r in pagerank_rows
+                    if r.get("category_id") is not None
+                }
+                degree_by_id = {
+                    str(r.get("category_id", "")): float(r.get("score", 0.0))
+                    for r in degree_rows
+                    if r.get("category_id") is not None
+                }
+                gds_meta = {
+                    "enabled": True,
+                    "pagerank_rows": pagerank_rows,
+                    "degree_rows": degree_rows,
+                }
+        except Exception as e:
+            # GDS not installed / blocked / insufficient permissions.
+            gds_meta = {"enabled": False, "error": str(e)[:300]}
+
+        # Enrich centrality rows and (when available) prefer algorithmic rank ordering.
+        for row in centrality_data:
+            cid = str(row.get("category_id", ""))
+            if cid:
+                if cid in pagerank_by_id:
+                    row["pagerank"] = pagerank_by_id[cid]
+                if cid in degree_by_id:
+                    row["gds_degree"] = degree_by_id[cid]
+
+        if gds_meta.get("enabled"):
+            centrality_data = sorted(
+                centrality_data,
+                key=lambda r: (
+                    -(float(r.get("pagerank", 0.0)) if r.get("pagerank") is not None else 0.0),
+                    -(float(r.get("gds_degree", 0.0)) if r.get("gds_degree") is not None else 0.0),
+                    -(float(r.get("code_degree", 0.0)) if r.get("code_degree") is not None else 0.0),
+                    -(float(r.get("fragment_degree", 0.0)) if r.get("fragment_degree") is not None else 0.0),
+                ),
+            )
+
         return {
             "project_id": project_id_str,
             "counts": counts,
             "category_centrality": centrality_data,
             "category_cooccurrence": cooccurrence_data,
+            "gds": gds_meta,
         }
 
     async def close(self):

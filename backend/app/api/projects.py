@@ -1,15 +1,18 @@
+import uuid
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.auth import CurrentUser, get_current_user
 from ..database import get_db
 from ..models.models import Project
 from ..schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
-from ..core.auth import CurrentUser, get_current_user
-import uuid
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
@@ -29,11 +32,13 @@ async def create_project(
         name=project_in.name,
         description=project_in.description,
         methodological_profile=project_in.methodological_profile,
+        domain_template=project_in.domain_template or "generic",
         language=project_in.language,
-        owner_id=user.user_uuid,  # ← Linked to authenticated user
+        owner_id=user.user_uuid,
     )
     if project_in.id:
         new_project.id = project_in.id
+
     db.add(new_project)
     try:
         await db.commit()
@@ -46,18 +51,19 @@ async def create_project(
     await db.refresh(new_project)
     return new_project
 
+
 @router.get("/", response_model=List[ProjectResponse])
 async def list_projects(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Only return projects owned by the authenticated user
     result = await db.execute(
         select(Project)
         .where(Project.owner_id == user.user_uuid)
         .order_by(Project.created_at.desc())
     )
     return result.scalars().all()
+
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
@@ -76,6 +82,7 @@ async def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
+
 @router.patch("/{project_id}", response_model=ProjectResponse)
 async def update_project(
     project_id: uuid.UUID,
@@ -92,14 +99,18 @@ async def update_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     update_data = project_in.model_dump(exclude_unset=True)
+    if "domain_template" in update_data and not update_data["domain_template"]:
+        update_data["domain_template"] = "generic"
+
     for field, value in update_data.items():
         setattr(project, field, value)
-    
+
     await db.commit()
     await db.refresh(project)
     return project
+
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
@@ -116,7 +127,7 @@ async def delete_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     await db.delete(project)
     await db.commit()
     return None

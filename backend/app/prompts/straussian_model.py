@@ -26,12 +26,25 @@ INSTRUCCIONES:
 RESPUESTA:
 Debes responder exclusivamente en formato JSON con la siguiente estructura:
 {
+  "selected_central_category": "string",
   "central_phenomenon": { "id": "uuid", "name": "string", "definition": "string" },
-  "causal_conditions": [ { "id": "uuid", "name": "string", "evidence": "string" } ],
+  "causal_conditions": [ { "id": "uuid", "name": "string", "evidence": "string", "evidence_ids": ["uuid"] } ],
   "context": [ { "id": "uuid", "name": "string", "evidence": "string" } ],
   "intervening_conditions": [ { "id": "uuid", "name": "string", "evidence": "string" } ],
   "action_strategies": [ { "id": "uuid", "name": "string", "evidence": "string" } ],
-  "consequences": [ { "id": "uuid", "name": "string", "evidence": "string" } ],
+  "consequences": [
+    {
+      "id": "uuid",
+      "name": "string",
+      "type": "material|social|institutional",
+      "horizon": "corto_plazo|largo_plazo",
+      "evidence": "string",
+      "evidence_ids": ["uuid"]
+    }
+  ],
+  "conditions": [ { "id": "uuid", "name": "string", "evidence": "string", "evidence_ids": ["uuid"] } ],
+  "actions": [ { "id": "uuid", "name": "string", "evidence": "string", "evidence_ids": ["uuid"] } ],
+  "propositions": [ { "text": "Si X y Y, entonces Z, porque M.", "evidence_ids": ["uuid"] } ],
   "theoretical_model_description": "string",
   "confidence_score": 0.0-1.0
 }

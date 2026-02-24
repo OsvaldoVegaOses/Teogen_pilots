@@ -20,6 +20,7 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     methodological_profile = Column(String(50))  # 'straussian', 'constructivist', 'glaserian'
+    domain_template = Column(String(50), default="generic", nullable=False)
     language = Column(String(10), default="es")
     owner_id = Column(UUID(as_uuid=True))  # Linked to Entra ID sub/oid
     created_at = Column(DateTime, default=datetime.utcnow)

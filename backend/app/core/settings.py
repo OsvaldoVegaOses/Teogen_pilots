@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import model_validator
 from pathlib import Path
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 
@@ -17,40 +18,38 @@ def _read_env_value(key: str) -> str:
             return env_value.strip().strip('"').strip("'")
     return ""
 
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TheoGen"
     TESTING: bool = False
-    
+
     # Frontend URL
     FRONTEND_URL: str = ""
-    
-    # Microsoft Foundry / Azure OpenAI API v1
-    AZURE_OPENAI_API_KEY: str = ""  # Tu clave de acceso
-    AZURE_OPENAI_ENDPOINT: str = "https://axial-resource.cognitiveservices.azure.com/"  # Tu endpoint
-    # New in 2025: api_version is less critical with /v1/ endpoint but still used in AzureOpenAI client
-    AZURE_OPENAI_API_VERSION: str = "2024-05-01-preview" 
-    
-    # Model Deployments (Exact names from your Foundry Portal)
-    # gpt-5.2-chat: 4250 RPM / 425K TPM — primary reasoning model
-    # DeepSeek-V3.2-Speciale: 500 RPM — returns empty choices via /v1/ endpoint; kept for direct use only
+
+    # Microsoft Foundry / Azure OpenAI
+    AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_ENDPOINT: str = "https://axial-resource.cognitiveservices.azure.com/"
+    AZURE_OPENAI_API_VERSION: str = "2024-05-01-preview"
+
+    # Model deployments
     MODEL_REASONING_ADVANCED: str = "gpt-5.2-chat"
     MODEL_REASONING_FAST: str = "gpt-5.2-chat"
     MODEL_REASONING_EFFICIENT: str = "gpt-5.2-chat"
     MODEL_CHAT: str = "gpt-5.2-chat"
     MODEL_EMBEDDING: str = "text-embedding-3-large"
     MODEL_TRANSCRIPTION: str = "gpt-4o-transcribe-diarize"
-    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"  # Fallback para claude_analysis()
+    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"
     MODEL_ROUTER: str = "model-router"
-    
-    # Advanced Options (Models identified in your portal)
+
+    # Advanced options
     MODEL_KIMI: str = "Kimi-K2.5"
     MODEL_DEEPSEEK: str = "DeepSeek-V3.2-Speciale"
-    
+
     # Microsoft Foundry Agent Service
     AZURE_SUBSCRIPTION_ID: str = ""
     AZURE_RESOURCE_GROUP: str = ""
     FOUNDRY_PROJECT_NAME: str = ""
-    
+
     # Azure PostgreSQL
     AZURE_PG_USER: str = ""
     AZURE_PG_PASSWORD: str = ""
@@ -60,55 +59,61 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
-    
+
     # Azure Storage
     AZURE_STORAGE_ACCOUNT: str = ""
     AZURE_STORAGE_KEY: str = ""
     AZURE_STORAGE_CONNECTION_STRING: str = ""
-    
-    # Foundry Tools (Speech)
+
+    # Speech
     AZURE_SPEECH_ENDPOINT: str = ""
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = "westeurope"
-    
-    # Azure Redis (v7.4)
+
+    # Azure Redis + Celery
     AZURE_REDIS_HOST: str = ""
     AZURE_REDIS_KEY: str = ""
     REDIS_SSL_PORT: int = 6380
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
     THEORY_USE_CELERY: bool = False
-    
-    # External Managed
+
+    # External managed services
     NEO4J_URI: str
     NEO4J_USER: str
     NEO4J_PASSWORD: str
-    
     QDRANT_URL: str
     QDRANT_API_KEY: str = ""
 
     # Runtime performance controls
     CODING_FRAGMENT_CONCURRENCY: int = 8
     THEORY_INTERVIEW_CONCURRENCY: int = 3
+    THEORY_LOCAL_MAX_CONCURRENT_TASKS: int = 4
     THEORY_STATUS_POLL_HINT_SECONDS: int = 5
     THEORY_TASK_LOCK_TTL_SECONDS: int = 1800
 
-    # LLM context-budget controls — prevents 400 context_length_exceeded on large projects.
-    # gpt-5.2-chat: 272K input limit / 100K output window / 425K TPM.
-    # 335K input tokens was reached by passing ALL categories + raw evidence fragments.
-    THEORY_MAX_CATS_FOR_LLM: int = 50        # max categories sent to identify_central_category (sorted by centrality)
-    THEORY_MAX_EVIDENCE_FRAGS: int = 2       # max semantic evidence fragments per category
-    THEORY_MAX_FRAG_CHARS: int = 400         # max chars per fragment text (≈100 tokens each)
-    THEORY_MAX_NETWORK_TOP: int = 30         # top-N items from centrality/cooccurrence lists
-    THEORY_LLM_MAX_OUTPUT_TOKENS: int = 8192 # default output token cap per call
-    # Large output cap for verbose calls (identify_central_category evaluates many cats with justifications).
-    # 50 cats × ~200 tokens each + overhead = ~12K tokens. 16K gives safe headroom.
+    # Context and budget controls
+    THEORY_MAX_CATS_FOR_LLM: int = 50
+    THEORY_MAX_EVIDENCE_FRAGS: int = 2
+    THEORY_MAX_FRAG_CHARS: int = 400
+    THEORY_MAX_NETWORK_TOP: int = 30
+    THEORY_LLM_MAX_OUTPUT_TOKENS: int = 8192
     THEORY_LLM_MAX_OUTPUT_TOKENS_LARGE: int = 16384
+    THEORY_PROMPT_VERSION: str = "v2"
+    THEORY_PIPELINE_MODE: str = "staged"
+    THEORY_BUDGET_MARGIN_TOKENS: int = 2000
+    THEORY_BUDGET_MAX_DEGRADATION_STEPS: int = 6
+    THEORY_BUDGET_FALLBACK_MAX_CATS: int = 60
+    THEORY_BUDGET_FALLBACK_MAX_FRAGS_PER_CAT: int = 3
+    THEORY_BUDGET_FALLBACK_MAX_FRAG_CHARS: int = 900
+    THEORY_BUDGET_FALLBACK_MAX_NETWORK_TOP: int = 60
+    MODEL_CONTEXT_LIMIT_GPT_52_CHAT: int = 272000
+    MODEL_CONTEXT_LIMIT_DEFAULT: int = 128000
 
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
-    
+
     @model_validator(mode="after")
     def validate_required_integrations(self):
         if not self.AZURE_SPEECH_ENDPOINT:
@@ -137,5 +142,6 @@ class Settings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
+
 
 settings = Settings()

@@ -1,35 +1,41 @@
-from openai import AsyncAzureOpenAI
-from ..core.settings import settings
+﻿from __future__ import annotations
+
 import logging
+
+from openai import AsyncAzureOpenAI
+
+from ..core.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Models that only support temperature=1 (o-series / reasoning).
-# Temperature param is skipped for these; the API uses its default (1).
-# Auto-detected at runtime from 400 'unsupported_value' errors.
+# Models that reject custom temperature values.
 _NO_TEMPERATURE_MODELS: set[str] = {
     "gpt-5.2-chat",
-    "o1", "o1-mini", "o1-preview",
-    "o3", "o3-mini",
+    "o1",
+    "o1-mini",
+    "o1-preview",
+    "o3",
+    "o3-mini",
     "o4-mini",
 }
 
-# Models that use 'max_completion_tokens' instead of 'max_tokens'.
-# Auto-detected at runtime from 400 'unsupported_parameter' errors.
+# Families that currently reject JSON mode in our Azure Foundry setup.
+_NO_JSON_MODELS: set[str] = {"deepseek", "kimi"}
+
+# Models that require max_completion_tokens instead of max_tokens.
 _USE_MAX_COMPLETION_TOKENS_MODELS: set[str] = {
     "gpt-5.2-chat",
-    "o1", "o1-mini", "o1-preview",
-    "o3", "o3-mini",
+    "o1",
+    "o1-mini",
+    "o1-preview",
+    "o3",
+    "o3-mini",
     "o4-mini",
 }
 
 
 class FoundryOpenAIService:
-    """Updated service for Microsoft Foundry & Azure OpenAI API v1 (2025).
-    
-    Uses async SDK clients to avoid blocking the event loop.
-    No local/mock fallback — requires valid Azure credentials.
-    """
+    """Service for Microsoft Foundry and Azure OpenAI chat/embeddings."""
 
     def __init__(self):
         self._azure_client = None
@@ -53,9 +59,6 @@ class FoundryOpenAIService:
     @property
     def client(self):
         self._ensure_clients()
-        # Use AsyncAzureOpenAI — routes to /openai/deployments/{model}/
-        # which matches the portal URI for all AIServices deployments.
-        # AsyncOpenAI with /openai/v1/ caused empty choices on DeepSeek.
         return self._azure_client
 
     @property
@@ -63,8 +66,29 @@ class FoundryOpenAIService:
         self._ensure_clients()
         return self._azure_client
 
+    @staticmethod
+    def _normalize_model_name(model: str) -> str:
+        return (model or "").strip().lower()
+
+    def _supports_temperature(self, model: str) -> bool:
+        normalized = self._normalize_model_name(model)
+        if normalized in _NO_TEMPERATURE_MODELS:
+            return False
+        if normalized.startswith(("o1", "o3", "o4")):
+            return False
+        return True
+
+    def _supports_json_mode(self, model: str) -> bool:
+        normalized = self._normalize_model_name(model)
+        return not any(blocked in normalized for blocked in _NO_JSON_MODELS)
+
+    def _uses_max_completion_tokens(self, model: str) -> bool:
+        normalized = self._normalize_model_name(model)
+        if normalized in _USE_MAX_COMPLETION_TOKENS_MODELS:
+            return True
+        return normalized.startswith(("o1", "o3", "o4"))
+
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Generates embeddings using text-embedding-3-large."""
         response = await self.azure_client.embeddings.create(
             model=settings.MODEL_EMBEDDING,
             input=texts,
@@ -72,46 +96,51 @@ class FoundryOpenAIService:
         return [item.embedding for item in response.data]
 
     async def reasoning_advanced(self, messages: list, **kwargs):
-        """Deep reasoning using DeepSeek-V3.2-Speciale."""
         return await self._chat_call(settings.MODEL_REASONING_ADVANCED, messages, **kwargs)
 
     async def kimi_reasoning(self, messages: list, **kwargs):
-        """Reasoning using Kimi-K2.5 (from your Foundry)."""
         return await self._chat_call(settings.MODEL_KIMI, messages, **kwargs)
 
     async def deepseek_reasoning(self, messages: list, **kwargs):
-        """Reasoning using DeepSeek-V3.2-Speciale (from your Foundry)."""
         return await self._chat_call(settings.MODEL_DEEPSEEK, messages, **kwargs)
 
     async def reasoning_fast(self, messages: list, **kwargs):
-        """Fast reasoning using DeepSeek-V3.2-Speciale."""
         return await self._chat_call(settings.MODEL_REASONING_FAST, messages, **kwargs)
 
     async def claude_analysis(self, messages: list, **kwargs):
-        """Qualitative analysis using MODEL_CLAUDE_ADVANCED (Kimi-K2.5)."""
         return await self._chat_call(settings.MODEL_CLAUDE_ADVANCED, messages, **kwargs)
 
     async def _chat_call(self, model: str, messages: list, temperature: float = 0.3, **kwargs):
-        """Unified async chat completion call with retry on empty choices and auto param-stripping.
-
-        Handles two classes of API errors automatically:
-        - temperature unsupported (reasoning/o-series models): stripped on first 400 and
-          model is added to _NO_TEMPERATURE_MODELS so future calls skip it immediately.
-        - response_format: always stripped as a safety net.
-        """
+        """Unified async chat completion with capability-aware parameter handling."""
         import asyncio
-        # Strip params that certain models never accept
-        kwargs.pop("response_format", None)
-        # Cap output tokens — avoids burning through TPM with the full 100K output window.
-        # Reasoning models (gpt-5.2, o-series) use 'max_completion_tokens'; others use 'max_tokens'.
-        # We normalise here: if caller passed 'max_tokens', rename it for reasoning models.
+
+        response_format = kwargs.pop("response_format", None)
         token_limit = kwargs.pop("max_tokens", None) or settings.THEORY_LLM_MAX_OUTPUT_TOKENS
-        if model in _USE_MAX_COMPLETION_TOKENS_MODELS:
+
+        if self._uses_max_completion_tokens(model):
             kwargs.setdefault("max_completion_tokens", token_limit)
+            kwargs.pop("max_tokens", None)
         else:
             kwargs.setdefault("max_tokens", token_limit)
-        if model not in _NO_TEMPERATURE_MODELS:
+            kwargs.pop("max_completion_tokens", None)
+
+        if self._supports_temperature(model):
             kwargs["temperature"] = temperature
+        else:
+            kwargs.pop("temperature", None)
+
+        if response_format and self._supports_json_mode(model):
+            kwargs["response_format"] = response_format
+
+        logger.debug(
+            "LLM call model=%s temp=%s max_tokens=%s max_completion_tokens=%s response_format=%s keys=%s",
+            model,
+            kwargs.get("temperature"),
+            kwargs.get("max_tokens"),
+            kwargs.get("max_completion_tokens"),
+            kwargs.get("response_format"),
+            sorted(kwargs.keys()),
+        )
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -122,40 +151,74 @@ class FoundryOpenAIService:
                     **kwargs,
                 )
             except Exception as e:
-                err_str = str(e)
-                # Auto-detect reasoning models that reject custom temperature (400 unsupported_value)
-                if "temperature" in err_str and "unsupported_value" in err_str and "temperature" in kwargs:
+                err_str = str(e).lower()
+
+                if "temperature" in err_str and "unsupported" in err_str and "temperature" in kwargs:
                     logger.warning(
-                        "Model '%s' rejected temperature param — stripping and retrying.",
+                        "Model '%s' rejected temperature param - stripping and retrying.",
                         model,
                     )
-                    kwargs.pop("temperature")
-                    _NO_TEMPERATURE_MODELS.add(model)
+                    kwargs.pop("temperature", None)
+                    _NO_TEMPERATURE_MODELS.add(self._normalize_model_name(model))
                     continue
-                # Auto-detect models that use max_completion_tokens instead of max_tokens
-                if "max_tokens" in err_str and "unsupported_parameter" in err_str and "max_tokens" in kwargs:
+
+                if "response_format" in err_str and "unsupported" in err_str and "response_format" in kwargs:
                     logger.warning(
-                        "Model '%s' rejected max_tokens — switching to max_completion_tokens and retrying.",
+                        "Model '%s' rejected response_format - stripping and retrying.",
+                        model,
+                    )
+                    kwargs.pop("response_format", None)
+                    lowered = self._normalize_model_name(model)
+                    if "deepseek" in lowered:
+                        _NO_JSON_MODELS.add("deepseek")
+                    if "kimi" in lowered:
+                        _NO_JSON_MODELS.add("kimi")
+                    continue
+
+                if "max_tokens" in err_str and "unsupported" in err_str and "max_tokens" in kwargs:
+                    logger.warning(
+                        "Model '%s' rejected max_tokens - switching to max_completion_tokens and retrying.",
                         model,
                     )
                     limit = kwargs.pop("max_tokens")
                     kwargs["max_completion_tokens"] = limit
-                    _USE_MAX_COMPLETION_TOKENS_MODELS.add(model)
+                    _USE_MAX_COMPLETION_TOKENS_MODELS.add(self._normalize_model_name(model))
                     continue
+
+                if (
+                    "max_completion_tokens" in err_str
+                    and "unsupported" in err_str
+                    and "max_completion_tokens" in kwargs
+                ):
+                    logger.warning(
+                        "Model '%s' rejected max_completion_tokens - switching to max_tokens and retrying.",
+                        model,
+                    )
+                    limit = kwargs.pop("max_completion_tokens")
+                    kwargs["max_tokens"] = limit
+                    _USE_MAX_COMPLETION_TOKENS_MODELS.discard(self._normalize_model_name(model))
+                    continue
+
                 raise
             else:
                 if response.choices:
                     return response.choices[0].message.content
+
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt  # 1s, 2s
+                    wait = 2**attempt
                     logger.warning(
                         "Model '%s' returned empty choices (attempt %d/%d). Retrying in %ds...",
-                        model, attempt + 1, max_retries, wait,
+                        model,
+                        attempt + 1,
+                        max_retries,
+                        wait,
                     )
                     await asyncio.sleep(wait)
+
         raise RuntimeError(
             f"Model '{model}' returned empty choices after {max_retries} attempts "
             f"(possible rate-limit or content filter)."
         )
+
 
 foundry_openai = FoundryOpenAIService()

@@ -1,27 +1,32 @@
-from reportlab.lib.pagesizes import LETTER
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
-from io import BytesIO
 from datetime import datetime
-from typing import Dict, Any, Optional
+from io import BytesIO
+from typing import Any, Dict
 import logging
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from .export.infographic_generator import InfographicGenerator
+from .export.pptx_generator import PptxGenerator
+from .export.xlsx_generator import XlsxGenerator
 
 logger = logging.getLogger(__name__)
 
-# Internationalization Dictionary
+
 I18N = {
     "es": {
-        "report_title": "Informe de Teoría Fundamentada",
+        "report_title": "Informe de Teoria Fundamentada",
         "project": "Proyecto",
-        "date": "Fecha de Generación",
-        "central_category": "Categoría Central",
-        "paradigm_model": "Modelo Paradigmático (Strauss)",
-        "propositions": "Proposiciones Teóricas",
-        "gap_analysis": "Análisis de Saturación y Brechas",
-        "confidence": "Índice de Confianza",
+        "date": "Fecha de Generacion",
+        "central_category": "Categoria Central",
+        "paradigm_model": "Modelo Paradigmatico (Strauss)",
+        "propositions": "Proposiciones Teoricas",
+        "gap_analysis": "Analisis de Saturacion y Brechas",
+        "confidence": "Indice de Confianza",
         "generated_by": "Generado por",
-        "version": "Versión",
+        "version": "Version",
         "no_data": "Sin datos disponibles",
         "conditions": "Condiciones",
         "actions": "Acciones/Interacciones",
@@ -44,134 +49,202 @@ I18N = {
         "actions": "Actions/Interactions",
         "consequences": "Consequences",
         "gaps_found": "Identified Gaps",
-    }
+    },
 }
+
 
 class ExportService:
     def __init__(self):
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+        self.pptx_generator = PptxGenerator()
+        self.xlsx_generator = XlsxGenerator()
+        self.infographic_generator = InfographicGenerator()
 
     def _setup_custom_styles(self):
-        # Custom styles for TheoGen brand
-        self.styles.add(ParagraphStyle(
-            name='TheoGenTitle',
-            parent=self.styles['Heading1'],
-            fontSize=24,
-            textColor=colors.indigo,
-            spaceAfter=30,
-            alignment=1 # Center
-        ))
-        self.styles.add(ParagraphStyle(
-            name='TheoGenSection',
-            parent=self.styles['Heading2'],
-            fontSize=18,
-            textColor=colors.indigo,
-            spaceBefore=20,
-            spaceAfter=12,
-            borderPadding=5,
-            borderWidth=0,
-            leftIndent=0
-        ))
-        self.styles.add(ParagraphStyle(
-            name='TheoGenBody',
-            parent=self.styles['Normal'],
-            fontSize=11,
-            leading=14,
-            spaceAfter=10
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="TheoGenTitle",
+                parent=self.styles["Heading1"],
+                fontSize=24,
+                textColor=colors.indigo,
+                spaceAfter=30,
+                alignment=1,
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="TheoGenSection",
+                parent=self.styles["Heading2"],
+                fontSize=18,
+                textColor=colors.indigo,
+                spaceBefore=20,
+                spaceAfter=12,
+                borderPadding=5,
+                borderWidth=0,
+                leftIndent=0,
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="TheoGenBody",
+                parent=self.styles["Normal"],
+                fontSize=11,
+                leading=14,
+                spaceAfter=10,
+            )
+        )
 
-    async def generate_theory_pdf(
-        self, 
-        project_name: str, 
-        language: str, 
-        theory_data: Dict[str, Any]
-    ) -> BytesIO:
-        """Generates a professional PDF report from theory data."""
-        
+    async def generate_theory_pdf(self, project_name: str, language: str, theory_data: Dict[str, Any]) -> BytesIO:
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=LETTER, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
-        
+
         lang = language if language in I18N else "es"
         texts = I18N[lang]
-        
+
+        def _to_text(val: Any) -> str:
+            if val is None:
+                return texts["no_data"]
+            if isinstance(val, str):
+                return val
+            if isinstance(val, (int, float)):
+                return str(val)
+            if isinstance(val, dict):
+                # prefer common keys
+                for k in ("text", "name", "title", "label"):
+                    if k in val and isinstance(val[k], (str, int, float)):
+                        return str(val[k])
+                try:
+                    return str(val)
+                except Exception:
+                    return texts["no_data"]
+            if isinstance(val, list):
+                try:
+                    return ", ".join([_to_text(v) for v in val])
+                except Exception:
+                    return texts["no_data"]
+            try:
+                return str(val)
+            except Exception:
+                return texts["no_data"]
+
+        def _to_para(val: Any, style_name: str = "TheoGenBody") -> Paragraph:
+            text = _to_text(val)
+            return Paragraph(text, self.styles.get(style_name, self.styles["TheoGenBody"]))
+
         elements = []
-        
-        # 1. Title & Header
-        elements.append(Paragraph(texts["report_title"], self.styles['TheoGenTitle']))
-        
+        elements.append(Paragraph(texts["report_title"], self.styles["TheoGenTitle"]))
+
         header_data = [
-            [texts["project"], project_name],
-            [texts["date"], datetime.now().strftime("%Y-%m-%d %H:%M")],
-            [texts["version"], str(theory_data.get("version", 1))],
-            [texts["confidence"], f"{theory_data.get('confidence_score', 0) * 100:.1f}%"],
-            [texts["generated_by"], theory_data.get("generated_by", "TheoGen AI")]
+            [texts["project"], _to_para(project_name, "TheoGenBody")],
+            [texts["date"], _to_para(datetime.now().strftime("%Y-%m-%d %H:%M"), "TheoGenBody")],
+            [texts["version"], _to_para(theory_data.get("version", 1), "TheoGenBody")],
+            [texts["confidence"], _to_para(f"{theory_data.get('confidence_score', 0) * 100:.1f}%", "TheoGenBody")],
+            [texts["generated_by"], _to_para(theory_data.get("generated_by", "TheoGen AI"), "TheoGenBody")],
         ]
-        
+
         header_table = Table(header_data, colWidths=[150, 300])
-        header_table.setStyle(TableStyle([
-            ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]))
+        header_table.setStyle(
+            TableStyle(
+                [
+                    ("TEXTCOLOR", (0, 0), (0, -1), colors.grey),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
         elements.append(header_table)
         elements.append(Spacer(1, 40))
-        
-        # 2. Central Category
-        elements.append(Paragraph(texts["central_category"], self.styles['TheoGenSection']))
+
+        elements.append(Paragraph(texts["central_category"], self.styles["TheoGenSection"]))
         model_json = theory_data.get("model_json", {})
-        central_cat = model_json.get("selected_central_category", texts["no_data"])
-        elements.append(Paragraph(f"<b>{central_cat}</b>", self.styles['TheoGenBody']))
-        
-        # 3. Paradigmatic Model
-        elements.append(Paragraph(texts["paradigm_model"], self.styles['TheoGenSection']))
-        
+        central_cat = model_json.get("selected_central_category")
+        if not central_cat and isinstance(model_json.get("central_phenomenon"), dict):
+            central_cat = (model_json.get("central_phenomenon") or {}).get("name")
+        central_cat_text = _to_text(central_cat or texts["no_data"])
+        elements.append(Paragraph(f"<b>{central_cat_text}</b>", self.styles["TheoGenBody"]))
+
+        elements.append(Paragraph(texts["paradigm_model"], self.styles["TheoGenSection"]))
+        conditions_val = model_json.get("conditions") or model_json.get("causal_conditions") or texts["no_data"]
+        actions_val = model_json.get("actions") or model_json.get("action_strategies") or texts["no_data"]
+        consequences_val = model_json.get("consequences") or texts["no_data"]
         paradigm_data = [
-            [texts["conditions"], model_json.get("conditions", texts["no_data"])],
-            [texts["actions"], model_json.get("actions", texts["no_data"])],
-            [texts["consequences"], model_json.get("consequences", texts["no_data"])]
+            [texts["conditions"], _to_para(conditions_val, "TheoGenBody")],
+            [texts["actions"], _to_para(actions_val, "TheoGenBody")],
+            [texts["consequences"], _to_para(consequences_val, "TheoGenBody")],
         ]
-        
+
         p_table = Table(paradigm_data, colWidths=[120, 330])
-        p_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.whitesmoke),
-            ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.grey),
-            ('BOX', (0, 0), (-1, -1), 0.25, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('PADDING', (0, 0), (-1, -1), 8),
-        ]))
+        p_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), colors.whitesmoke),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("BOX", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("PADDING", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
         elements.append(p_table)
         elements.append(Spacer(1, 20))
-        
-        # 4. Propositions
+
         elements.append(PageBreak())
-        elements.append(Paragraph(texts["propositions"], self.styles['TheoGenSection']))
+        elements.append(Paragraph(texts["propositions"], self.styles["TheoGenSection"]))
         propositions = theory_data.get("propositions", [])
         if not propositions:
-            elements.append(Paragraph(texts["no_data"], self.styles['TheoGenBody']))
+            elements.append(Paragraph(texts["no_data"], self.styles["TheoGenBody"]))
         else:
             for i, prop in enumerate(propositions, 1):
-                # Handle both string and dict propositions
-                text = prop if isinstance(prop, str) else prop.get("text", texts["no_data"])
-                elements.append(Paragraph(f"{i}. {text}", self.styles['TheoGenBody']))
-        
-        # 5. Gap Analysis
+                raw_text = prop if isinstance(prop, str) else (prop.get("text") if isinstance(prop, dict) else prop)
+                text = _to_text(raw_text)
+                elements.append(Paragraph(f"{i}. {text}", self.styles["TheoGenBody"]))
+
         elements.append(Spacer(1, 20))
-        elements.append(Paragraph(texts["gap_analysis"], self.styles['TheoGenSection']))
+        elements.append(Paragraph(texts["gap_analysis"], self.styles["TheoGenSection"]))
         gaps = theory_data.get("gaps", [])
         if not gaps:
-            elements.append(Paragraph(texts["no_data"], self.styles['TheoGenBody']))
+            elements.append(Paragraph(texts["no_data"], self.styles["TheoGenBody"]))
         else:
-            elements.append(Paragraph(texts["gaps_found"] + ":", self.styles['Normal']))
+            elements.append(Paragraph(texts["gaps_found"] + ":", self.styles["Normal"]))
             for gap in gaps:
-                text = gap if isinstance(gap, str) else gap.get("description", texts["no_data"])
-                elements.append(Paragraph(f"• {text}", self.styles['TheoGenBody']))
+                raw_text = gap if isinstance(gap, str) else (gap.get("description") if isinstance(gap, dict) else gap)
+                text = _to_text(raw_text)
+                elements.append(Paragraph(f"- {text}", self.styles["TheoGenBody"]))
 
-        # Build PDF
         doc.build(elements)
         buffer.seek(0)
         return buffer
+
+    async def generate_theory_pptx(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
+        return self.pptx_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+
+    async def generate_theory_xlsx(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
+        return self.xlsx_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+
+    async def generate_theory_infographic(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
+        return self.infographic_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+
+    async def generate_theory_report(
+        self,
+        project_name: str,
+        language: str,
+        theory_data: Dict[str, Any],
+        format: str = "pdf",
+        template_key: str = "generic",
+    ) -> tuple[BytesIO, str, str]:
+        fmt = (format or "pdf").lower()
+        if fmt == "pdf":
+            return await self.generate_theory_pdf(project_name, language, theory_data), "pdf", "application/pdf"
+        if fmt == "pptx":
+            return await self.generate_theory_pptx(project_name, theory_data, template_key), "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        if fmt == "xlsx":
+            return await self.generate_theory_xlsx(project_name, theory_data, template_key), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if fmt == "png":
+            return await self.generate_theory_infographic(project_name, theory_data, template_key), "png", "image/png"
+        raise ValueError(f"Unsupported export format: {format}")
+
 
 export_service = ExportService()
