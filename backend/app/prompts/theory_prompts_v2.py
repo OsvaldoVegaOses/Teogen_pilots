@@ -33,18 +33,18 @@ REGLAS OBLIGATORIAS DE CALIDAD (no omitir):
 - Cada proposicion debe referenciar al menos 1 evidencia via ids (`evidence_ids`), usando fragment_id/id provistos en los datos.
 
 3) JSON esperado (minimo):
-{
+{{
   "selected_central_category": "string",
   "conditions": [...],
   "actions": [...],
   "consequences": [
-    { "name": "string", "type": "material|social|institutional", "horizon": "corto_plazo|largo_plazo", "evidence_ids": ["..."] }
+    {{ "name": "string", "type": "material|social|institutional", "horizon": "corto_plazo|largo_plazo", "evidence_ids": ["..."] }}
   ],
   "propositions": [
-    { "text": "Si X y Y, entonces Z, porque M.", "evidence_ids": ["..."] }
+    {{ "text": "Si X y Y, entonces Z, porque M.", "evidence_ids": ["..."] }}
   ],
   "confidence_score": 0.0
-}
+}}
 
 Datos:
 {payload}
