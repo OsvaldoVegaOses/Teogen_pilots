@@ -471,7 +471,12 @@ async def export_theory_report(
             "format": extension,
         }
 
-    except Exception as e:
-        logger.error("Failed to export report: %s", e)
+    except Exception:
+        logger.exception(
+            "Failed to export report project_id=%s theory_id=%s format=%s",
+            project_id,
+            theory_id,
+            format,
+        )
         raise HTTPException(status_code=500, detail="Failed to generate or upload report")
 
