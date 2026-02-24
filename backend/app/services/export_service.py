@@ -2,15 +2,14 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict
 import logging
+import re
+
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-from .export.infographic_generator import InfographicGenerator
-from .export.pptx_generator import PptxGenerator
-from .export.xlsx_generator import XlsxGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +56,32 @@ class ExportService:
     def __init__(self):
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
-        self.pptx_generator = PptxGenerator()
-        self.xlsx_generator = XlsxGenerator()
-        self.infographic_generator = InfographicGenerator()
+        # Lazy init so the backend can still start even if optional export deps are missing
+        # (e.g. python-pptx in some dev environments).
+        self._pptx_generator = None
+        self._xlsx_generator = None
+        self._infographic_generator = None
+
+    def _get_pptx_generator(self):
+        if self._pptx_generator is None:
+            from .export.pptx_generator import PptxGenerator
+
+            self._pptx_generator = PptxGenerator()
+        return self._pptx_generator
+
+    def _get_xlsx_generator(self):
+        if self._xlsx_generator is None:
+            from .export.xlsx_generator import XlsxGenerator
+
+            self._xlsx_generator = XlsxGenerator()
+        return self._xlsx_generator
+
+    def _get_infographic_generator(self):
+        if self._infographic_generator is None:
+            from .export.infographic_generator import InfographicGenerator
+
+            self._infographic_generator = InfographicGenerator()
+        return self._infographic_generator
 
     def _setup_custom_styles(self):
         self.styles.add(
@@ -94,6 +116,16 @@ class ExportService:
                 spaceAfter=10,
             )
         )
+        self.styles.add(
+            ParagraphStyle(
+                name="TheoGenSubSection",
+                parent=self.styles["Heading3"],
+                fontSize=14,
+                textColor=colors.indigo,
+                spaceBefore=16,
+                spaceAfter=8,
+            )
+        )
 
     async def generate_theory_pdf(self, project_name: str, language: str, theory_data: Dict[str, Any]) -> BytesIO:
         buffer = BytesIO()
@@ -102,18 +134,27 @@ class ExportService:
         lang = language if language in I18N else "es"
         texts = I18N[lang]
 
+        # ReportLab Paragraph is strict: it uses an XML-ish markup and can choke on control characters.
+        _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+
+        def _sanitize_text(s: str) -> str:
+            if not s:
+                return s
+            # Keep \t, \n, \r but strip other low ASCII controls.
+            return _CONTROL_CHARS_RE.sub("", s)
+
         def _to_text(val: Any) -> str:
             if val is None:
                 return texts["no_data"]
             if isinstance(val, str):
-                return val
+                return _sanitize_text(val)
             if isinstance(val, (int, float)):
                 return str(val)
             if isinstance(val, dict):
                 # prefer common keys
                 for k in ("text", "name", "title", "label"):
                     if k in val and isinstance(val[k], (str, int, float)):
-                        return str(val[k])
+                        return _sanitize_text(str(val[k]))
                 try:
                     return str(val)
                 except Exception:
@@ -129,8 +170,90 @@ class ExportService:
                 return texts["no_data"]
 
         def _to_para(val: Any, style_name: str = "TheoGenBody") -> Paragraph:
-            text = _to_text(val)
+            # ReportLab Paragraph uses an XML-ish markup; always escape.
+            text = _xml_escape(_sanitize_text(_to_text(val)))
             return Paragraph(text, self.styles.get(style_name, self.styles["TheoGenBody"]))
+
+        def _to_bold_para(val: Any, style_name: str = "TheoGenBody") -> Paragraph:
+            # Keep markup for <b> but escape user/model content.
+            safe = _xml_escape(_sanitize_text(_to_text(val)))
+            return Paragraph(f"<b>{safe}</b>", self.styles.get(style_name, self.styles["TheoGenBody"]))
+
+        def _to_lines_para(lines: list[str], style_name: str = "TheoGenBody") -> Paragraph:
+            if not lines:
+                return _to_para(texts["no_data"], style_name)
+            safe_lines = [_xml_escape(_sanitize_text(str(x))) for x in lines if x is not None and str(x).strip()]
+            if not safe_lines:
+                return _to_para(texts["no_data"], style_name)
+            # Allow line breaks as markup.
+            return Paragraph("<br/>".join(safe_lines), self.styles.get(style_name, self.styles["TheoGenBody"]))
+
+        def _as_list(val: Any) -> list:
+            return val if isinstance(val, list) else []
+
+        def _render_consequences(consequences: Any, available_width: float) -> list:
+            cons = _as_list(consequences)
+            if not cons:
+                return [_to_para(texts["no_data"], "TheoGenBody")]
+
+            # If consequences are not structured dicts, render as bullets (more robust than forcing a table).
+            if not any(isinstance(c, dict) for c in cons):
+                lines = [f"- {_to_text(c)}" for c in cons[:20] if _to_text(c).strip()]
+                return [_to_lines_para(lines, "TheoGenBody")]
+
+            rows = [["Tipo", "Horizonte", "Consecuencia", "Evidencia (ids)"]]
+            for c in cons[:20]:
+                if not isinstance(c, dict):
+                    rows.append(["", "", _to_text(c), ""])
+                    continue
+
+                name = c.get("name") or c.get("description") or c.get("text") or texts["no_data"]
+                ctype = c.get("type") or ""
+                horizon = c.get("horizon") or ""
+                ev = c.get("evidence_ids") or c.get("evidence_id") or []
+                ev_text = ", ".join(map(str, ev)) if isinstance(ev, list) else str(ev)
+                rows.append([ctype, horizon, name, ev_text])
+
+            # Scale column widths to the page width (avoid nested-table overflow bugs).
+            col_widths = [
+                available_width * 0.16,
+                available_width * 0.18,
+                available_width * 0.46,
+                available_width * 0.20,
+            ]
+            t = Table(
+                [[_to_para(c, "TheoGenBody") for c in row] if i > 0 else row for i, row in enumerate(rows)],
+                colWidths=col_widths,
+            )
+            t.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("PADDING", (0, 0), (-1, -1), 6),
+                    ]
+                )
+            )
+            return [t]
+
+        def _render_propositions(props: Any) -> list:
+            items = _as_list(props)
+            if not items:
+                return [_to_para(texts["no_data"], "TheoGenBody")]
+
+            out: list = []
+            for i, p in enumerate(items[:15], 1):
+                if isinstance(p, dict):
+                    text = p.get("text") or p.get("proposition") or texts["no_data"]
+                    ev = p.get("evidence_ids") or []
+                    ev_text = ", ".join(map(str, ev)) if isinstance(ev, list) else str(ev)
+                    line = f"{i}. {text} (evidence: {ev_text})"
+                else:
+                    line = f"{i}. {p}"
+                out.append(_to_para(line, "TheoGenBody"))
+            return out
 
         elements = []
         elements.append(Paragraph(texts["report_title"], self.styles["TheoGenTitle"]))
@@ -164,7 +287,7 @@ class ExportService:
         if not central_cat and isinstance(model_json.get("central_phenomenon"), dict):
             central_cat = (model_json.get("central_phenomenon") or {}).get("name")
         central_cat_text = _to_text(central_cat or texts["no_data"])
-        elements.append(Paragraph(f"<b>{central_cat_text}</b>", self.styles["TheoGenBody"]))
+        elements.append(_to_bold_para(central_cat_text, "TheoGenBody"))
 
         elements.append(Paragraph(texts["paradigm_model"], self.styles["TheoGenSection"]))
         conditions_val = model_json.get("conditions") or model_json.get("causal_conditions") or texts["no_data"]
@@ -173,7 +296,6 @@ class ExportService:
         paradigm_data = [
             [texts["conditions"], _to_para(conditions_val, "TheoGenBody")],
             [texts["actions"], _to_para(actions_val, "TheoGenBody")],
-            [texts["consequences"], _to_para(consequences_val, "TheoGenBody")],
         ]
 
         p_table = Table(paradigm_data, colWidths=[120, 330])
@@ -191,41 +313,39 @@ class ExportService:
         elements.append(p_table)
         elements.append(Spacer(1, 20))
 
+        elements.append(Paragraph(texts["consequences"], self.styles["TheoGenSubSection"]))
+        elements.extend(_render_consequences(consequences_val, doc.width))
+        elements.append(Spacer(1, 20))
+
         elements.append(PageBreak())
         elements.append(Paragraph(texts["propositions"], self.styles["TheoGenSection"]))
-        propositions = theory_data.get("propositions", [])
-        if not propositions:
-            elements.append(Paragraph(texts["no_data"], self.styles["TheoGenBody"]))
-        else:
-            for i, prop in enumerate(propositions, 1):
-                raw_text = prop if isinstance(prop, str) else (prop.get("text") if isinstance(prop, dict) else prop)
-                text = _to_text(raw_text)
-                elements.append(Paragraph(f"{i}. {text}", self.styles["TheoGenBody"]))
+        propositions = theory_data.get("propositions") or model_json.get("propositions") or []
+        elements.extend(_render_propositions(propositions))
 
         elements.append(Spacer(1, 20))
         elements.append(Paragraph(texts["gap_analysis"], self.styles["TheoGenSection"]))
         gaps = theory_data.get("gaps", [])
         if not gaps:
-            elements.append(Paragraph(texts["no_data"], self.styles["TheoGenBody"]))
+            elements.append(_to_para(texts["no_data"], "TheoGenBody"))
         else:
             elements.append(Paragraph(texts["gaps_found"] + ":", self.styles["Normal"]))
             for gap in gaps:
                 raw_text = gap if isinstance(gap, str) else (gap.get("description") if isinstance(gap, dict) else gap)
                 text = _to_text(raw_text)
-                elements.append(Paragraph(f"- {text}", self.styles["TheoGenBody"]))
+                elements.append(_to_para(f"- {text}", "TheoGenBody"))
 
         doc.build(elements)
         buffer.seek(0)
         return buffer
 
     async def generate_theory_pptx(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
-        return self.pptx_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+        return self._get_pptx_generator().generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
 
     async def generate_theory_xlsx(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
-        return self.xlsx_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+        return self._get_xlsx_generator().generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
 
     async def generate_theory_infographic(self, project_name: str, theory_data: Dict[str, Any], template_key: str = "generic") -> BytesIO:
-        return self.infographic_generator.generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
+        return self._get_infographic_generator().generate(project_name=project_name, theory_data=theory_data, template_key=template_key)
 
     async def generate_theory_report(
         self,

@@ -22,6 +22,9 @@ INSTRUCCIONES:
 2. Establece vínculos direccionales claros (causalidad, contexto, acción).
 3. Asegúrate de que CADA enlace esté respaldado por al menos un fragmento de entrevista.
 4. Identifica procesos (secuencias de acciones a través del tiempo).
+5. Coherencia: cualquier constructo que uses en "propositions" debe estar representado como categoría en
+   "causal_conditions"/"action_strategies"/"consequences" o, si corresponde, agregado en "context" o "intervening_conditions".
+   No dejes variables nuevas solo en el texto de "propositions".
 
 RESPUESTA:
 Debes responder exclusivamente en formato JSON con la siguiente estructura:

@@ -133,6 +133,9 @@ class TheoryGenerationEngine:
             out["actions"] = out.get("action_strategies")
         if "propositions" not in out:
             out["propositions"] = []
+        # Keep the Straussian fields available to support proposition→context coherence.
+        out.setdefault("context", [])
+        out.setdefault("intervening_conditions", [])
 
         return out
 
@@ -140,6 +143,8 @@ class TheoryGenerationEngine:
     def validate_paradigm(paradigm: Dict[str, Any]) -> Dict[str, Any]:
         props = paradigm.get("propositions") or []
         consequences = paradigm.get("consequences") or []
+        context = paradigm.get("context") or []
+        intervening = paradigm.get("intervening_conditions") or []
 
         validation: Dict[str, Any] = {
             "propositions_count": len(props) if isinstance(props, list) else 0,
@@ -148,6 +153,8 @@ class TheoryGenerationEngine:
             "consequences_ok": False,
             "consequences_types_present": [],
             "consequences_horizons_present": [],
+            "context_count": len(context) if isinstance(context, list) else 0,
+            "intervening_conditions_count": len(intervening) if isinstance(intervening, list) else 0,
         }
 
         types_present = set()
@@ -174,6 +181,68 @@ class TheoryGenerationEngine:
         )
 
         return validation
+
+    async def repair_context_intervening(
+        self,
+        *,
+        central_cat: str,
+        paradigm: Dict[str, Any],
+        evidence_index: List[Dict[str, Any]],
+        available_categories: List[str],
+        target_min_each: int = 2,
+    ) -> Dict[str, Any]:
+        """
+        Best-effort repair: ensure constructs introduced in propositions are represented in context/intervening.
+        Returns a dict with keys: context, intervening_conditions (each list).
+        """
+
+        target_min_each = max(0, min(6, int(target_min_each)))
+        evidence_rule = (
+            "- Cuando sea posible, incluye evidence_ids con al menos 1 id del evidence_index.\n"
+            if evidence_index
+            else "- Incluye evidence_ids (puede ser lista vacia si no hay evidencia_index).\n"
+        )
+
+        prompt = "".join(
+            [
+                "Ajusta SOLO los campos context e intervening_conditions.\n",
+                "Objetivo: si alguna proposicion introduce un constructo que NO esta representado como categoria en conditions/actions/consequences,\n",
+                "debes agregarlo como categoria en context o intervening_conditions.\n",
+                "Reglas:\n",
+                "- NO inventar nuevos conceptos; solo usar conceptos presentes en propositions o en available_categories.\n",
+                "- No usar terminos meta-metodologicos (entrevista, informante, identificacion, etc.).\n",
+                "- Usa nombres canonicos y consistentes.\n",
+                f"- Apunta a minimo {target_min_each} items en cada lista cuando haya material suficiente.\n",
+                evidence_rule,
+                "- Devuelve JSON valido y SOLO JSON con este schema:\n",
+                "{\n",
+                "  \"context\": [ { \"name\": \"string\", \"evidence_ids\": [\"...\"] } ],\n",
+                "  \"intervening_conditions\": [ { \"name\": \"string\", \"evidence_ids\": [\"...\"] } ]\n",
+                "}\n\n",
+                f"selected_central_category: {central_cat}\n",
+                f"conditions: {paradigm.get('conditions')}\n",
+                f"actions: {paradigm.get('actions')}\n",
+                f"consequences: {paradigm.get('consequences')}\n",
+                f"propositions: {paradigm.get('propositions')}\n",
+                f"current_context: {paradigm.get('context')}\n",
+                f"current_intervening_conditions: {paradigm.get('intervening_conditions')}\n",
+                f"available_categories: {available_categories[:80]}\n",
+                f"evidence_index: {evidence_index}\n",
+            ]
+        )
+
+        messages = build_messages(get_system_prompt_for_step("gaps"), prompt)
+        raw = await self.ai.reasoning_fast(messages=messages)
+        repaired = safe_json_loads(raw) or {}
+        out = {
+            "context": repaired.get("context", []),
+            "intervening_conditions": repaired.get("intervening_conditions", []),
+        }
+        if not isinstance(out["context"], list):
+            out["context"] = []
+        if not isinstance(out["intervening_conditions"], list):
+            out["intervening_conditions"] = []
+        return out
 
     async def repair_propositions(
         self,

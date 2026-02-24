@@ -1,6 +1,6 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional, Dict
 from uuid import UUID
 from pydantic import BaseModel
 
@@ -9,7 +9,7 @@ from ..services.azure_openai import foundry_openai
 from ..core.auth import CurrentUser, get_current_user
 from ..database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..models.models import Project
+from ..models.models import Project, Fragment, Interview
 from sqlalchemy import select
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -25,6 +25,21 @@ class SearchRequest(BaseModel):
     query: str
     limit: int = 5
     project_filter: Optional[UUID] = None  # If None, search across all user's projects (future)
+
+
+class FragmentLookupRequest(BaseModel):
+    project_id: UUID
+    fragment_ids: List[UUID]
+
+
+class FragmentLookupResult(BaseModel):
+    fragment_id: UUID
+    interview_id: UUID
+    paragraph_index: Optional[int] = None
+    speaker_id: Optional[str] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+
 
 @router.post("/fragments", response_model=List[SearchResult])
 async def search_fragments(
@@ -77,4 +92,47 @@ async def search_fragments(
         ))
         
     return response
+
+
+@router.post("/fragments/lookup", response_model=List[FragmentLookupResult])
+async def lookup_fragments(
+    request: FragmentLookupRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not request.fragment_ids:
+        return []
+
+    # Verify ownership via project_id and owner_id, and constrain fragments to the project.
+    project_result = await db.execute(
+        select(Project).where(
+            Project.id == request.project_id,
+            Project.owner_id == user.user_uuid,
+        )
+    )
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+
+    rows = await db.execute(
+        select(Fragment, Interview.id.label("interview_id"))
+        .join(Interview, Fragment.interview_id == Interview.id)
+        .where(
+            Fragment.id.in_(request.fragment_ids[:200]),
+            Interview.project_id == request.project_id,
+        )
+    )
+
+    out: List[FragmentLookupResult] = []
+    for frag, interview_id in rows.all():
+        out.append(
+            FragmentLookupResult(
+                fragment_id=frag.id,
+                interview_id=interview_id,
+                paragraph_index=getattr(frag, "paragraph_index", None),
+                speaker_id=getattr(frag, "speaker_id", None),
+                start_ms=getattr(frag, "start_ms", None),
+                end_ms=getattr(frag, "end_ms", None),
+            )
+        )
+    return out
 

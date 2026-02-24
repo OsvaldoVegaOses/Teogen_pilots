@@ -12,6 +12,10 @@ code_fragment_links = Table(
     Column("code_id", UUID(as_uuid=True), ForeignKey("codes.id", ondelete="CASCADE"), primary_key=True),
     Column("fragment_id", UUID(as_uuid=True), ForeignKey("fragments.id", ondelete="CASCADE"), primary_key=True),
     Column("confidence", Float, default=1.0),
+    Column("char_start", Integer),
+    Column("char_end", Integer),
+    Column("source", String(20)),
+    Column("linked_at", DateTime, default=datetime.utcnow),
 )
 
 class Project(Base):
@@ -57,6 +61,9 @@ class Fragment(Base):
     text = Column(Text, nullable=False)
     start_offset = Column(Integer)
     end_offset = Column(Integer)
+    paragraph_index = Column(Integer)
+    start_ms = Column(Integer)
+    end_ms = Column(Integer)
     speaker_id = Column(String(50))
     embedding_synced = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -549,6 +549,9 @@ class TheoryPipeline:
 
         paradigm_validation_before = self.theory_engine.validate_paradigm(paradigm)
         repairs_applied: List[str] = []
+        available_category_names = [
+            str(c.get("name")) for c in (cats_data or []) if isinstance(c, dict) and c.get("name")
+        ]
         if not paradigm_validation_before.get("consequences_ok"):
             try:
                 repaired_consequences = await self.theory_engine.repair_consequences(
@@ -576,6 +579,48 @@ class TheoryPipeline:
                     repairs_applied.append("propositions")
             except Exception:
                 pass
+
+        # Ensure constructs introduced by propositions are reflected as categories in context/intervening_conditions.
+        try:
+            ctx = paradigm.get("context") or []
+            ic = paradigm.get("intervening_conditions") or []
+            needs_ctx_repair = (not isinstance(ctx, list) or len(ctx) == 0) and (not isinstance(ic, list) or len(ic) == 0)
+            if needs_ctx_repair:
+                repaired_ctx = await self.theory_engine.repair_context_intervening(
+                    central_cat=central_cat_data["selected_central_category"],
+                    paradigm=paradigm,
+                    evidence_index=evidence_index,
+                    available_categories=available_category_names,
+                    target_min_each=2,
+                )
+                if repaired_ctx.get("context") or repaired_ctx.get("intervening_conditions"):
+                    # Merge (dedupe by name string) without clobbering existing values if present.
+                    def _norm_name(v: Any) -> str:
+                        if isinstance(v, dict):
+                            return str(v.get("name") or v.get("text") or "").strip().lower()
+                        return str(v or "").strip().lower()
+
+                    existing_ctx = paradigm.get("context") if isinstance(paradigm.get("context"), list) else []
+                    existing_ic = paradigm.get("intervening_conditions") if isinstance(paradigm.get("intervening_conditions"), list) else []
+                    ctx_names = {_norm_name(v) for v in existing_ctx if _norm_name(v)}
+                    ic_names = {_norm_name(v) for v in existing_ic if _norm_name(v)}
+
+                    for item in repaired_ctx.get("context", []) or []:
+                        n = _norm_name(item)
+                        if n and n not in ctx_names:
+                            existing_ctx.append(item)
+                            ctx_names.add(n)
+                    for item in repaired_ctx.get("intervening_conditions", []) or []:
+                        n = _norm_name(item)
+                        if n and n not in ic_names:
+                            existing_ic.append(item)
+                            ic_names.add(n)
+
+                    paradigm["context"] = existing_ctx
+                    paradigm["intervening_conditions"] = existing_ic
+                    repairs_applied.append("context_intervening")
+        except Exception:
+            pass
 
         paradigm_validation_after = self.theory_engine.validate_paradigm(paradigm)
         self._log_stage(
@@ -645,8 +690,8 @@ class TheoryPipeline:
                 "gap_analysis": gaps,
                 "network_metrics_summary": {
                     "counts": network_metrics.get("counts", {}),
-                    "category_centrality_top": network_metrics.get("category_centrality", [])[:5],
-                    "category_cooccurrence_top": network_metrics.get("category_cooccurrence", [])[:5],
+                    "category_centrality_top": network_metrics.get("category_centrality", [])[:20],
+                    "category_cooccurrence_top": network_metrics.get("category_cooccurrence", [])[:30],
                     "semantic_evidence_top": semantic_evidence,
                 },
                 "budget_debug": {

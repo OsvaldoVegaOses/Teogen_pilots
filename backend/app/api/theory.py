@@ -403,7 +403,11 @@ async def list_theories(
     if not project_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    result = await db.execute(select(Theory).filter(Theory.project_id == project_id))
+    result = await db.execute(
+        select(Theory)
+        .filter(Theory.project_id == project_id)
+        .order_by(Theory.created_at.desc())
+    )
     return result.scalars().all()
 
 
@@ -479,4 +483,3 @@ async def export_theory_report(
             format,
         )
         raise HTTPException(status_code=500, detail="Failed to generate or upload report")
-

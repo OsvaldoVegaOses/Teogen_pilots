@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
+import CodeEvidenceModal from "./CodeEvidenceModal";
 
 interface Code {
     id: string;
@@ -13,6 +14,7 @@ interface Code {
 
 export default function CodeExplorer({ projectId }: { projectId: string }) {
     const [codes, setCodes] = useState<Code[]>([]);
+    const [openCodeId, setOpenCodeId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchCodes = async () => {
@@ -42,11 +44,11 @@ export default function CodeExplorer({ projectId }: { projectId: string }) {
                             <h4 className="font-bold text-sm dark:text-white">{code.label}</h4>
                             <p className="text-xs text-zinc-500 line-clamp-1">{code.definition || "Sin definición conceptual"}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${code.created_by === 'ai' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>
                                 {code.created_by}
                             </span>
-                            <button className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-indigo-600 font-bold">Ver</button>
+                            <button onClick={() => setOpenCodeId(code.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-indigo-600 font-bold">Ver</button>
                         </div>
                     </div>
                 ))}
@@ -57,6 +59,10 @@ export default function CodeExplorer({ projectId }: { projectId: string }) {
                     </div>
                 )}
             </div>
+            {openCodeId && (
+                <CodeEvidenceModal codeId={openCodeId} projectId={projectId} onClose={() => setOpenCodeId(null)} />
+            )}
         </div>
     );
 }
+ 

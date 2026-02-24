@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
+import InterviewModal from "./InterviewModal";
+import ExportPanel, { enqueueLocalExport } from "./ExportPanel";
 
 export default function InterviewUpload({ projectId, onUploadSuccess }: { projectId: string, onUploadSuccess: () => void }) {
     const [file, setFile] = useState<File | null>(null);
@@ -9,6 +11,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
     const [uploading, setUploading] = useState(false);
     const [message, setMessage] = useState("");
     const [interviews, setInterviews] = useState<any[]>([]);
+    const [openInterview, setOpenInterview] = useState<string | null>(null);
 
     const fetchInterviewStatuses = async () => {
         if (!projectId) return;
@@ -128,13 +131,69 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
 
                                 return (
                                     <div key={item.id} className="flex items-center justify-between text-xs">
-                                        <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
+                                            <button onClick={() => setOpenInterview(item.id)} className="text-indigo-600 text-xs font-bold">Ver</button>
+                                            <button onClick={async () => {
+                                                // start export single interview as json (fire-and-forget / poll)
+                                                if (!projectId) return;
+                                                try {
+                                                    const resp = await apiClient(`interviews/export`, {
+                                                        method: "POST",
+                                                        body: JSON.stringify({
+                                                            project_id: projectId,
+                                                            interview_ids: [item.id],
+                                                            scope: "selected",
+                                                            format: "json",
+                                                            include_metadata: true,
+                                                            include_codes: true,
+                                                            include_timestamps: true,
+                                                            language: "es"
+                                                        })
+                                                    });
+                                                    if (!resp.ok) {
+                                                        console.error("Export failed", resp.status);
+                                                    } else {
+                                                        const data = await resp.json();
+                                                        console.log("Export enqueued", data.task_id);
+                                                        alert(`Export encolado (task ${data.task_id}). Revisa estado en exportaciones.`);
+                                                    }
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    alert("Error iniciando export");
+                                                }
+                                            }} className="text-zinc-600 text-xs">Exportar</button>
+                                        </div>
                                         <span className="font-medium">{statusLabel}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
+                )}
+                <div className="mt-3">
+                    <button onClick={async () => {
+                        if (!projectId) return;
+                        try {
+                            const resp = await apiClient(`interviews/export`, {
+                                method: 'POST',
+                                body: JSON.stringify({ project_id: projectId, scope: 'all_project', format: 'pdf', include_metadata: true, include_codes: true, include_timestamps: true, language: 'es' })
+                            });
+                            if (!resp.ok) {
+                                alert('No se pudo encolar exportación');
+                                return;
+                            }
+                            const data = await resp.json();
+                            enqueueLocalExport(data.task_id);
+                            alert(`Export encolado (task ${data.task_id})`);
+                        } catch (e) { console.error(e); alert('Error iniciando export'); }
+                    }} className="w-full rounded-2xl bg-indigo-600 py-2 font-bold text-white">Exportar todas las entrevistas (PDF)</button>
+                </div>
+                <div className="mt-3">
+                    <ExportPanel projectId={projectId} />
+                </div>
+                {openInterview && (
+                    <InterviewModal interviewId={openInterview} projectId={projectId} onClose={() => setOpenInterview(null)} />
                 )}
             </form>
         </div>

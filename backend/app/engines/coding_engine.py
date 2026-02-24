@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from uuid import UUID
+from typing import Optional, Tuple
 
 from qdrant_client.models import PointStruct
 from sqlalchemy import func, select, update
@@ -32,10 +33,18 @@ def _normalize_extracted_code(code_data):
         label = (code_data.get("label") or "").strip()
         definition = (code_data.get("definition") or "").strip()
         confidence = code_data.get("confidence", 1.0)
+        evidence_text = (
+            code_data.get("evidence_text")
+            or code_data.get("quote")
+            or code_data.get("evidence")
+            or code_data.get("text_span")
+            or ""
+        )
     elif isinstance(code_data, str):
         label = code_data.strip()
         definition = ""
         confidence = 1.0
+        evidence_text = ""
     else:
         return None
 
@@ -46,7 +55,24 @@ def _normalize_extracted_code(code_data):
         "label": label,
         "definition": definition,
         "confidence": confidence,
+        "evidence_text": evidence_text,
     }
+
+
+def _infer_char_span(fragment_text: str, evidence_text: str) -> Tuple[Optional[int], Optional[int]]:
+    if not fragment_text or not evidence_text:
+        return None, None
+
+    needle = str(evidence_text).strip()
+    if not needle:
+        return None, None
+
+    pos = fragment_text.find(needle)
+    if pos < 0:
+        pos = fragment_text.lower().find(needle.lower())
+    if pos < 0:
+        return None, None
+    return pos, pos + len(needle)
 
 
 class CodingEngine:
@@ -107,11 +133,15 @@ class CodingEngine:
 
             code_id = await self._get_or_create_code(db, project_id, label, code_data, codes_cache)
             codes_to_sync.append((code_id, label))
+            char_start, char_end = _infer_char_span(fragment_text, code_data.get("evidence_text", ""))
             links_to_insert.append(
                 {
                     "code_id": code_id,
                     "fragment_id": fragment_id,
                     "confidence": code_data.get("confidence", 1.0),
+                    "source": "ai",
+                    "char_start": char_start,
+                    "char_end": char_end,
                 }
             )
 
@@ -276,11 +306,15 @@ class CodingEngine:
                 )
                 labels_this_frag.append(label)
                 neo4j_pairs.append((fragment.id, code_id))
+                char_start, char_end = _infer_char_span(fragment.text, code_data.get("evidence_text", ""))
                 links_to_insert.append(
                     {
                         "code_id": code_id,
                         "fragment_id": fragment.id,
                         "confidence": code_data.get("confidence", 1.0),
+                        "source": "ai",
+                        "char_start": char_start,
+                        "char_end": char_end,
                     }
                 )
 

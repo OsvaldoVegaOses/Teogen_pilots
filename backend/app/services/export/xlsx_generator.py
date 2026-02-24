@@ -70,6 +70,17 @@ class XlsxGenerator:
                 row.get("fragment_degree", ""),
             ])
 
+        ws_co = wb.create_sheet("Coocurrencia")
+        ws_co.append(["category_a_id", "category_a_name", "category_b_id", "category_b_name", "shared_fragments"])
+        for row in summary.get("category_cooccurrence_top", []) or []:
+            ws_co.append([
+                row.get("category_a_id", ""),
+                row.get("category_a_name", ""),
+                row.get("category_b_id", ""),
+                row.get("category_b_name", ""),
+                row.get("shared_fragments", ""),
+            ])
+
         ws_evidence = wb.create_sheet("Evidencia")
         ws_evidence.append(["category_id", "category_name", "fragment_id", "score", "text", "codes"])
         for bucket in summary.get("semantic_evidence_top", []) or []:

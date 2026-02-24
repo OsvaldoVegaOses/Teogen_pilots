@@ -32,10 +32,19 @@ REGLAS OBLIGATORIAS DE CALIDAD (no omitir):
 - Formato: "Si X y Y, entonces Z, porque M."
 - Cada proposicion debe referenciar al menos 1 evidencia via ids (`evidence_ids`), usando fragment_id/id provistos en los datos.
 
-3) JSON esperado (minimo):
+3) Coherencia de constructos (obligatorio):
+- NO introducir variables/constructos solo en proposiciones.
+- Si una proposicion incluye un constructo que NO esta representado en conditions/actions/consequences, debes agregarlo como categoria en:
+  - intervening_conditions (si es un factor que habilita/restringe estrategias), o
+  - context (si describe condiciones situacionales/territoriales del fenomeno).
+- Usa nombres canonicos y consistentes (mismos terminos en todo el JSON).
+
+4) JSON esperado (minimo):
 {{
   "selected_central_category": "string",
   "conditions": [...],
+  "context": [...],
+  "intervening_conditions": [...],
   "actions": [...],
   "consequences": [
     {{ "name": "string", "type": "material|social|institutional", "horizon": "corto_plazo|largo_plazo", "evidence_ids": ["..."] }}
