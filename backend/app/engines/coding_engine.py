@@ -153,19 +153,22 @@ class CodingEngine:
         try:
             embeddings = await self.ai.generate_embeddings([fragment_text])
             if embeddings:
-                await qdrant_service.upsert_vectors(
-                    project_id=project_id,
-                    points=[
-                        PointStruct(
-                            id=str(fragment_id),
-                            vector=embeddings[0],
-                            payload={
-                                "text": fragment_text,
-                                "project_id": str(project_id),
-                                "codes": [lbl for _, lbl in codes_to_sync],
-                            },
-                        )
-                    ],
+                await asyncio.wait_for(
+                    qdrant_service.upsert_vectors(
+                        project_id=project_id,
+                        points=[
+                            PointStruct(
+                                id=str(fragment_id),
+                                vector=embeddings[0],
+                                payload={
+                                    "text": fragment_text,
+                                    "project_id": str(project_id),
+                                    "codes": [lbl for _, lbl in codes_to_sync],
+                                },
+                            )
+                        ],
+                    ),
+                    timeout=max(5, int(settings.CODING_QDRANT_UPSERT_TIMEOUT_SECONDS)),
                 )
                 await db.execute(
                     update(Fragment).where(Fragment.id == fragment_id).values(embedding_synced=True)
@@ -174,10 +177,19 @@ class CodingEngine:
             logger.error("Embedding sync failed for fragment %s: %s", fragment_id, e)
 
         try:
-            await neo4j_service.create_fragment_node(project_id, fragment_id, fragment_text)
+            await asyncio.wait_for(
+                neo4j_service.create_fragment_node(project_id, fragment_id, fragment_text),
+                timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
+            )
             for code_id, label in codes_to_sync:
-                await neo4j_service.create_code_node(project_id, code_id, label)
-                await neo4j_service.create_code_fragment_relation(code_id, fragment_id)
+                await asyncio.wait_for(
+                    neo4j_service.create_code_node(project_id, code_id, label),
+                    timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
+                )
+                await asyncio.wait_for(
+                    neo4j_service.create_code_fragment_relation(code_id, fragment_id),
+                    timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
+                )
         except Exception as e:
             logger.error("Neo4j sync failed for fragment %s: %s", fragment_id, e)
 
@@ -330,6 +342,7 @@ class CodingEngine:
             embed_code_labels.append(labels_this_frag)
 
         try:
+            # Embeddings can be a long pole; guard with timeouts/retries inside the service.
             all_embeddings = await self.ai.generate_embeddings(embed_texts)
             qdrant_points = [
                 PointStruct(
@@ -342,22 +355,29 @@ class CodingEngine:
                 )
             ]
             if qdrant_points:
-                await qdrant_service.upsert_vectors(project_id=project_id, points=qdrant_points)
-            if embed_frag_ids:
+                await asyncio.wait_for(
+                    qdrant_service.upsert_vectors(project_id=project_id, points=qdrant_points),
+                    timeout=max(5, int(settings.CODING_QDRANT_UPSERT_TIMEOUT_SECONDS)),
+                )
+
+            # Mark only the fragments we successfully embedded (zip() may truncate on mismatch).
+            embedded_ids = embed_frag_ids[: len(all_embeddings)]
+            if embedded_ids:
                 await db.execute(
-                    update(Fragment)
-                    .where(Fragment.id.in_(embed_frag_ids))
-                    .values(embedding_synced=True)
+                    update(Fragment).where(Fragment.id.in_(embedded_ids)).values(embedding_synced=True)
                 )
         except Exception as e:
             logger.error("Batch Qdrant upsert failed for interview %s: %s", interview_id, e)
 
         try:
-            await neo4j_service.batch_sync_interview(
-                project_id=project_id,
-                fragments=[(f.id, f.text) for f in fragments],
-                codes_cache=codes_cache,
-                fragment_code_pairs=neo4j_pairs,
+            await asyncio.wait_for(
+                neo4j_service.batch_sync_interview(
+                    project_id=project_id,
+                    fragments=[(f.id, f.text) for f in fragments],
+                    codes_cache=codes_cache,
+                    fragment_code_pairs=neo4j_pairs,
+                ),
+                timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
             )
         except Exception as e:
             logger.error("Batch Neo4j sync failed for interview %s: %s", interview_id, e)

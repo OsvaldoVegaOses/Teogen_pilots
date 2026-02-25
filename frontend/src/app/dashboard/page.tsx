@@ -8,6 +8,8 @@ import InterviewUpload from "@/components/InterviewUpload";
 import MemoManager from "@/components/MemoManager";
 import CodeExplorer from "@/components/CodeExplorer";
 import TheoryViewer from "@/components/TheoryViewer";
+import InterviewModal from "@/components/InterviewModal";
+import ExportPanel, { enqueueLocalExport } from "@/components/ExportPanel";
 
 const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
 type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
@@ -32,7 +34,12 @@ export default function Dashboard() {
     const [projects, setProjects] = useState<any[]>([]);
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"overview" | "codes" | "memos">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "codes" | "interviews" | "memos">("overview");
+
+    // Interviews tab state
+    const [interviews, setInterviews] = useState<any[]>([]);
+    const [loadingInterviews, setLoadingInterviews] = useState(false);
+    const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
 
     const [activeTheory, setActiveTheory] = useState<any | null>(null);
     const [loadingTheory, setLoadingTheory] = useState(false);
@@ -103,6 +110,24 @@ export default function Dashboard() {
 
         fetchTheory();
     }, [selectedProjectId]);
+
+    // Load interviews when tab is selected
+    useEffect(() => {
+        if (activeTab !== "interviews" || !selectedProjectId || !isAuthenticated) return;
+        setLoadingInterviews(true);
+        const load = async () => {
+            try {
+                const { apiClient } = await import("@/lib/api");
+                const resp = await apiClient(`/interviews/project/${selectedProjectId}`);
+                if (resp.ok) setInterviews(await resp.json());
+            } catch (e) {
+                console.error("Error loading interviews:", e);
+            } finally {
+                setLoadingInterviews(false);
+            }
+        };
+        load();
+    }, [activeTab, selectedProjectId, isAuthenticated]);
 
     // Restore in-progress task_id from localStorage after page reload
     useEffect(() => {
@@ -364,10 +389,17 @@ export default function Dashboard() {
                         nextDelayMs = Math.min(15000, Math.round(nextDelayMs * 1.15));
                     }
                     setTimeout(poll, nextDelayMs);
-                } catch {
-                    setTheoryFailed(true);
-                    setTheoryMessage("Error de conexión al consultar estado.");
-                    setGeneratingTheory(false);
+                } catch (pollErr) {
+                    console.error("[poll] network exception (attempt", attempts, "):", pollErr);
+                    // Retry up to 5 times on transient network/MSAL errors before giving up
+                    if (attempts < 5) {
+                        const retryDelay = Math.min(nextDelayMs * 2, 15000);
+                        setTimeout(poll, retryDelay);
+                    } else {
+                        setTheoryFailed(true);
+                        setTheoryMessage("Error de conexión al consultar estado. Intenta refrescar la página.");
+                        setGeneratingTheory(false);
+                    }
                 }
             };
             setTimeout(poll, nextDelayMs);
@@ -405,6 +437,13 @@ export default function Dashboard() {
                         📚 Libro de Códigos
                     </button>
                     <button
+                        onClick={() => setActiveTab("interviews")}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'interviews' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        🎙️ Entrevistas
+                    </button>
+                    <button
                         onClick={() => setActiveTab("memos")}
                         disabled={!selectedProjectId}
                         className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -421,6 +460,7 @@ export default function Dashboard() {
                         <h1 className="text-2xl font-bold dark:text-white">
                             {activeTab === "overview" && "Panel de Control"}
                             {activeTab === "codes" && "Exploración de Conceptos"}
+                            {activeTab === "interviews" && "Entrevistas"}
                             {activeTab === "memos" && "Memos Analíticos"}
                         </h1>
                     </div>
@@ -643,6 +683,76 @@ export default function Dashboard() {
                         </div>
                     )}
 
+                    {activeTab === "interviews" && selectedProjectId && (
+                        <div className="max-w-5xl mx-auto space-y-6">
+                            <div className="rounded-3xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-xl font-bold dark:text-white">🎙️ Entrevistas del Proyecto</h3>
+                                    <span className="text-sm text-zinc-500 font-medium">{interviews.length} entrevista{interviews.length !== 1 ? 's' : ''}</span>
+                                </div>
+                                {loadingInterviews ? (
+                                    <p className="text-zinc-500 text-sm">Cargando entrevistas...</p>
+                                ) : interviews.length === 0 ? (
+                                    <p className="text-sm text-zinc-400">No hay entrevistas en este proyecto. Sube una desde el Panel de Control.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {interviews.map((iv) => (
+                                            <div key={iv.id} className="group flex items-center justify-between rounded-xl border border-zinc-100 p-4 hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:hover:bg-zinc-900">
+                                                <div className="min-w-0">
+                                                    <h4 className="font-bold text-sm dark:text-white truncate">{iv.participant_pseudonym || iv.id}</h4>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {iv.transcription_method || 'sin transcripción'}
+                                                        {iv.word_count ? ` · ${iv.word_count} palabras` : ''}
+                                                        {iv.language ? ` · ${iv.language}` : ''}
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-2 ml-4">
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                                        iv.status === 'transcribed' ? 'bg-green-100 text-green-700' :
+                                                        iv.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-zinc-100 text-zinc-500'
+                                                    }`}>{iv.status || 'uploaded'}</span>
+                                                    <button
+                                                        onClick={() => setOpenInterviewId(iv.id)}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg px-3 py-1"
+                                                    >
+                                                        Ver transcripción
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            const { apiClient } = await import('@/lib/api');
+                                                            const resp = await apiClient('interviews/export', {
+                                                                method: 'POST',
+                                                                body: JSON.stringify({
+                                                                    project_id: selectedProjectId,
+                                                                    interview_ids: [iv.id],
+                                                                    scope: 'selected',
+                                                                    format: 'json',
+                                                                    include_metadata: true,
+                                                                    include_codes: true,
+                                                                    include_timestamps: true,
+                                                                    language: 'es',
+                                                                }),
+                                                            });
+                                                            if (resp.ok) {
+                                                                const d = await resp.json();
+                                                                enqueueLocalExport(d.task_id);
+                                                            }
+                                                        }}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-zinc-600 border border-zinc-200 rounded-lg px-3 py-1"
+                                                    >
+                                                        Exportar JSON
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <ExportPanel projectId={selectedProjectId} />
+                        </div>
+                    )}
+
                     {activeTab === "memos" && selectedProjectId && (
                         <div className="max-w-4xl mx-auto">
                             <MemoManager projectId={selectedProjectId} />
@@ -650,6 +760,14 @@ export default function Dashboard() {
                     )}
                 </div>
             </main>
+
+            {openInterviewId && (
+                <InterviewModal
+                    interviewId={openInterviewId}
+                    projectId={selectedProjectId}
+                    onClose={() => setOpenInterviewId(null)}
+                />
+            )}
         </div>
     );
 }

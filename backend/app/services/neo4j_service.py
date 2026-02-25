@@ -149,7 +149,8 @@ class FoundryNeo4jService:
         pid = str(project_id)
         async with self.driver.session() as session:
             if categories:
-                await session.run(
+                await self._run(
+                    session,
                     """
                     UNWIND $cats AS c
                     MERGE (p:Project {id: $pid})
@@ -164,7 +165,8 @@ class FoundryNeo4jService:
                 )
 
             if code_category_pairs:
-                await session.run(
+                await self._run(
+                    session,
                     """
                     UNWIND $pairs AS p
                     MATCH (cat:Category {id: p.category_id})
@@ -197,7 +199,8 @@ class FoundryNeo4jService:
         async with self.driver.session() as session:
             # 1. Batch fragment nodes
             if fragments:
-                await session.run(
+                await self._run(
+                    session,
                     """
                     UNWIND $frags AS f
                     MERGE (proj:Project {id: $pid})
@@ -216,7 +219,8 @@ class FoundryNeo4jService:
 
             # 2. Batch code nodes (whole project cache — idempotent MERGE)
             if codes_cache:
-                await session.run(
+                await self._run(
+                    session,
                     """
                     UNWIND $codes AS c
                     MERGE (proj:Project {id: $pid})
@@ -235,7 +239,8 @@ class FoundryNeo4jService:
 
             # 3. Batch code→fragment relations
             if fragment_code_pairs:
-                await session.run(
+                await self._run(
+                    session,
                     """
                     UNWIND $pairs AS p
                     MATCH (c:Code {id: p.code_id})
@@ -329,10 +334,11 @@ class FoundryNeo4jService:
 
                 async with self.driver.session() as session:
                     # Detect GDS availability.
-                    await session.run("CALL gds.version() YIELD version RETURN version")
+                    await self._run(session, "CALL gds.version() YIELD version RETURN version", {})
 
                     try:
-                        await session.run(
+                        await self._run(
+                            session,
                             """
                             CALL gds.graph.project.cypher(
                               $graph_name,
@@ -351,7 +357,8 @@ class FoundryNeo4jService:
                         )
                         graph_created = True
 
-                        pr_res = await session.run(
+                        pr_res = await self._run(
+                            session,
                             """
                             CALL gds.pageRank.stream($graph_name, {relationshipWeightProperty: 'weight'})
                             YIELD nodeId, score
@@ -364,7 +371,8 @@ class FoundryNeo4jService:
                         )
                         pagerank_rows = await pr_res.data()
 
-                        deg_res = await session.run(
+                        deg_res = await self._run(
+                            session,
                             """
                             CALL gds.degree.stream($graph_name, {relationshipWeightProperty: 'weight'})
                             YIELD nodeId, score
@@ -379,7 +387,8 @@ class FoundryNeo4jService:
                     finally:
                         if graph_created:
                             try:
-                                await session.run(
+                                await self._run(
+                                    session,
                                     "CALL gds.graph.drop($graph_name, false)",
                                     {"graph_name": graph_name},
                                 )
@@ -439,11 +448,22 @@ class FoundryNeo4jService:
         if self.driver:
             await self.driver.close()
 
+    async def _run(self, session: AsyncSession, query: str, parameters: Dict[str, Any]):
+        """
+        Run a Cypher query with a best-effort server-side timeout.
+        Falls back gracefully if the installed driver version doesn't support the timeout kwarg.
+        """
+        timeout_s = max(5, int(getattr(settings, "NEO4J_QUERY_TIMEOUT_SECONDS", 120)))
+        try:
+            return await session.run(query, parameters, timeout=timeout_s)
+        except TypeError:
+            return await session.run(query, parameters)
+
     async def _execute_write(self, query: str, parameters: Dict[str, Any]):
         """Internal helper to execute write transactions safely."""
         try:
             async with self.driver.session() as session:
-                await session.run(query, parameters)
+                await self._run(session, query, parameters)
         except Exception as e:
             logger.error(f"Neo4j write failed: {e}")
             raise
@@ -452,7 +472,7 @@ class FoundryNeo4jService:
         """Internal helper to execute read queries and return plain dict rows."""
         try:
             async with self.driver.session() as session:
-                result = await session.run(query, parameters)
+                result = await self._run(session, query, parameters)
                 return await result.data()
         except Exception as e:
             logger.error(f"Neo4j read failed: {e}")

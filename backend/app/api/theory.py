@@ -34,6 +34,7 @@ _LOCK_PREFIX = "theory_lock:"
 _redis_client = None
 _theory_tasks: Dict[str, Dict[str, Any]] = {}
 _background_tasks: Set[asyncio.Task] = set()
+_background_tasks_by_id: Dict[str, asyncio.Task] = {}
 _local_pipeline_semaphore = asyncio.Semaphore(max(1, settings.THEORY_LOCAL_MAX_CONCURRENT_TASKS))
 theory_pipeline = TheoryPipeline()
 
@@ -205,6 +206,19 @@ async def _run_theory_pipeline(task_id: str, project_id: UUID, user_uuid: UUID, 
             session_local = get_session_local()
             async with session_local() as db:
                 await _theory_pipeline(task_id, project_id, user_uuid, request, db)
+    except asyncio.CancelledError:
+        # Best-effort: mark canceled. If cancellation happens during an uninterruptible I/O,
+        # this might be delayed until the next await completes.
+        logger.warning("[theory] task %s CANCELLED by user", task_id)
+        await _set_task_state(
+            task_id,
+            status_value="failed",
+            step="canceled",
+            progress=100,
+            error="Canceled by user",
+            error_code="CANCELED",
+        )
+        raise
     except (MultipleResultsFound, JSONDecodeError) as e:
         logger.exception("[theory] task %s failed with known data error", task_id)
         await _set_task_state(
@@ -307,7 +321,9 @@ async def generate_theory(
         else:
             bg_task = asyncio.create_task(_run_theory_pipeline(task_id, project_id, user.user_uuid, request))
             _background_tasks.add(bg_task)
+            _background_tasks_by_id[task_id] = bg_task
             bg_task.add_done_callback(_background_tasks.discard)
+            bg_task.add_done_callback(lambda _t: _background_tasks_by_id.pop(task_id, None))
             logger.info("[theory] enqueued task %s for project %s in local mode", task_id, project_id)
     except Exception as e:
         await _release_project_lock(project_id, task_id)
@@ -326,6 +342,48 @@ async def generate_theory(
         "next_poll_seconds": settings.THEORY_STATUS_POLL_HINT_SECONDS,
         "execution_mode": _theory_tasks[task_id]["execution_mode"],
     }
+
+
+@router.post("/{project_id}/generate-theory/cancel/{task_id}")
+async def cancel_theory_task(
+    project_id: UUID,
+    task_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    task = _theory_tasks.get(task_id) or await _restore_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("project_id") != str(project_id) or task.get("owner_id") != str(user.user_uuid):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.get("status") in ("completed", "failed"):
+        return task
+
+    # Local-mode: cancel coroutine if still tracked.
+    bg = _background_tasks_by_id.get(task_id)
+    if bg and not bg.done():
+        bg.cancel()
+
+    # Celery-mode: best-effort revoke (does not guarantee termination of a running task).
+    worker_task_id = task.get("worker_task_id")
+    if worker_task_id:
+        try:
+            from ..tasks.celery_app import celery_app
+
+            celery_app.control.revoke(worker_task_id, terminate=False)
+        except Exception:
+            pass
+
+    await _set_task_state(
+        task_id,
+        status_value="failed",
+        step="canceled",
+        progress=100,
+        error="Canceled by user",
+        error_code="CANCELED",
+    )
+    await _release_project_lock(project_id, task_id)
+    return _theory_tasks.get(task_id) or task
 
 
 @router.get("/{project_id}/generate-theory/status/{task_id}")

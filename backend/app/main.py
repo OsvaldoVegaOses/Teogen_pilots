@@ -1,10 +1,18 @@
 # TheoGen API - Deployment Trigger
+import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import projects, theory, interviews, codes, memos, search
 from app.core.settings import settings
 from app.services.neo4j_service import neo4j_service
 from app.services.qdrant_service import qdrant_service
+
+# Uvicorn's default logging config often only shows access logs; ensure app logs are visible.
+_level_name = (os.getenv("APP_LOG_LEVEL") or "INFO").upper()
+_level = getattr(logging, _level_name, logging.INFO)
+logging.getLogger().setLevel(_level)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -16,6 +24,7 @@ app = FastAPI(
 # Define allowed origins specifically, avoiding "*" in production if possible
 origins = [
     settings.FRONTEND_URL,
+    "https://theogen.nubeweb.cl",
     "http://localhost:3000",
     "https://theogenfrontwpdxe2pv.z13.web.core.windows.net",
     "https://theogenfrontpllrx4ji.z13.web.core.windows.net", # URL actual del usuario

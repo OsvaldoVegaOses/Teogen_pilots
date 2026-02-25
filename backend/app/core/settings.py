@@ -38,12 +38,12 @@ class Settings(BaseSettings):
     MODEL_CHAT: str = "gpt-5.2-chat"
     MODEL_EMBEDDING: str = "text-embedding-3-large"
     MODEL_TRANSCRIPTION: str = "gpt-4o-transcribe-diarize"
-    MODEL_CLAUDE_ADVANCED: str = "Kimi-K2.5"
-    MODEL_ROUTER: str = "model-router"
+    MODEL_CLAUDE_ADVANCED: str = "gpt-5.2-chat"
+    MODEL_ROUTER: str = "gpt-5.2-chat"
 
     # Advanced options
-    MODEL_KIMI: str = "Kimi-K2.5"
-    MODEL_DEEPSEEK: str = "DeepSeek-V3.2-Speciale"
+    MODEL_KIMI: str = "gpt-5.2-chat"
+    MODEL_DEEPSEEK: str = "gpt-5.2-chat"
 
     # Microsoft Foundry Agent Service
     AZURE_SUBSCRIPTION_ID: str = ""
@@ -91,6 +91,15 @@ class Settings(BaseSettings):
     THEORY_LOCAL_MAX_CONCURRENT_TASKS: int = 4
     THEORY_STATUS_POLL_HINT_SECONDS: int = 5
     THEORY_TASK_LOCK_TTL_SECONDS: int = 1800
+
+    # External call timeouts / batching (prevent "stuck" tasks)
+    AI_EMBEDDINGS_TIMEOUT_SECONDS: int = 120
+    AI_EMBEDDINGS_MAX_RETRIES: int = 3
+    AI_EMBEDDINGS_BATCH_SIZE: int = 64
+    THEORY_AUTOCODE_INTERVIEW_TIMEOUT_SECONDS: int = 3600
+    CODING_QDRANT_UPSERT_TIMEOUT_SECONDS: int = 60
+    CODING_NEO4J_SYNC_TIMEOUT_SECONDS: int = 120
+    NEO4J_QUERY_TIMEOUT_SECONDS: int = 120
 
     # Context and budget controls
     THEORY_MAX_CATS_FOR_LLM: int = 50

@@ -54,6 +54,8 @@ class FoundryOpenAIService:
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            timeout=120.0,
+            max_retries=0,  # retries handled manually in _chat_call
         )
 
     @property
@@ -89,11 +91,72 @@ class FoundryOpenAIService:
         return normalized.startswith(("o1", "o3", "o4"))
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        response = await self.azure_client.embeddings.create(
-            model=settings.MODEL_EMBEDDING,
-            input=texts,
-        )
-        return [item.embedding for item in response.data]
+        """
+        Generate embeddings with batching + timeouts + retries.
+
+        This method is called in hot paths (auto-coding and semantic evidence fetch).
+        Without explicit timeouts, a single stalled upstream call can freeze long-running
+        background tasks (e.g. theory generation stuck at 25%).
+        """
+        import asyncio
+
+        if not texts:
+            return []
+
+        batch_size = max(1, int(settings.AI_EMBEDDINGS_BATCH_SIZE))
+        timeout_s = max(10, int(settings.AI_EMBEDDINGS_TIMEOUT_SECONDS))
+        max_retries = max(1, int(settings.AI_EMBEDDINGS_MAX_RETRIES))
+
+        out: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            last_err: Exception | None = None
+            for attempt in range(max_retries):
+                try:
+                    response = await asyncio.wait_for(
+                        self.azure_client.embeddings.create(
+                            model=settings.MODEL_EMBEDDING,
+                            input=batch,
+                        ),
+                        timeout=timeout_s,
+                    )
+                    vectors = [item.embedding for item in response.data]
+                    if len(vectors) != len(batch):
+                        raise RuntimeError(
+                            f"Embedding batch size mismatch: inputs={len(batch)} outputs={len(vectors)}"
+                        )
+                    out.extend(vectors)
+                    last_err = None
+                    break
+                except asyncio.TimeoutError as e:
+                    last_err = e
+                    logger.error(
+                        "Embeddings call timed out after %ss (batch=%d, attempt %d/%d)",
+                        timeout_s,
+                        len(batch),
+                        attempt + 1,
+                        max_retries,
+                    )
+                except Exception as e:
+                    last_err = e
+                    logger.error(
+                        "Embeddings call failed (batch=%d, attempt %d/%d): %s",
+                        len(batch),
+                        attempt + 1,
+                        max_retries,
+                        str(e)[:300],
+                    )
+
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2**attempt)
+
+            if last_err is not None:
+                raise RuntimeError(
+                    f"Embedding generation failed after {max_retries} attempts "
+                    f"(batch_size={len(batch)}): {last_err}"
+                )
+
+        return out
 
     async def reasoning_advanced(self, messages: list, **kwargs):
         return await self._chat_call(settings.MODEL_REASONING_ADVANCED, messages, **kwargs)
@@ -145,11 +208,25 @@ class FoundryOpenAIService:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = await self.client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    **kwargs,
+                response = await asyncio.wait_for(
+                    self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        **kwargs,
+                    ),
+                    timeout=120,
                 )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "LLM call timed out after 120s (model=%s, attempt %d/%d)",
+                    model,
+                    attempt + 1,
+                    max_retries,
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                raise RuntimeError(f"Model '{model}' timed out after {max_retries} attempts")
             except Exception as e:
                 err_str = str(e).lower()
 

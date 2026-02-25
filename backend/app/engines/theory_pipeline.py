@@ -189,10 +189,44 @@ class TheoryPipeline:
             async def _code_interview(iv_id: UUID):
                 async with sem:
                     async with session_local() as iv_db:
-                        await self.coding_engine.auto_code_interview(project_id, iv_id, iv_db)
+                        # Ensure a single interview cannot stall the whole theory task forever.
+                        await asyncio.wait_for(
+                            self.coding_engine.auto_code_interview(project_id, iv_id, iv_db),
+                            timeout=max(60, int(settings.THEORY_AUTOCODE_INTERVIEW_TIMEOUT_SECONDS)),
+                        )
 
-            await asyncio.gather(*[_code_interview(iv.id) for iv in completed_interviews])
-            await refresh_lock()
+            if completed_interviews:
+                n_total = len(completed_interviews)
+                n_done = 0
+                failures: list[str] = []
+
+                tasks = [asyncio.create_task(_code_interview(iv.id)) for iv in completed_interviews]
+                for fut in asyncio.as_completed(tasks):
+                    try:
+                        await fut
+                    except Exception as e:
+                        failures.append(str(e)[:300])
+                    finally:
+                        n_done += 1
+                        # Keep UI moving inside the long auto-code stage (25% -> 40%).
+                        stage_pct = 25 + int((15 * n_done) / max(1, n_total))
+                        await mark_step("auto_code", stage_pct)
+                        await refresh_lock()
+
+                if failures:
+                    # Best-effort: auto-coding can partially succeed; pipeline will still
+                    # enforce minimum categories later.
+                    logger.warning(
+                        "[theory][%s] auto_code had %d/%d interview failures (showing up to 3): %s",
+                        task_id,
+                        len(failures),
+                        n_total,
+                        failures[:3],
+                    )
+            else:
+                # No interviews to auto-code; keep pipeline moving.
+                await refresh_lock()
+
             logger.info(
                 "[theory][%s] auto_code interviews=%d elapsed=%.2fs",
                 task_id,

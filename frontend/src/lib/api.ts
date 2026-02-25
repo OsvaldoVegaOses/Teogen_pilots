@@ -66,7 +66,12 @@ async function getAccessToken(forceRefresh = false): Promise<string | null> {
  * Automatically injects the Bearer token into requests.
  */
 export async function apiClient(endpoint: string, options: RequestInit = {}): Promise<Response> {
-    const token = await getAccessToken();
+    let token: string | null = null;
+    try {
+        token = await getAccessToken();
+    } catch (msalErr) {
+        console.warn("getAccessToken() threw unexpectedly, proceeding without token:", msalErr);
+    }
 
     const headers: Record<string, string> = {
         ...(options.headers as Record<string, string>),
