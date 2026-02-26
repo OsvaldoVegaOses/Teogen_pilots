@@ -18,6 +18,7 @@ class FoundryNeo4jService:
     def __init__(self):
         self.driver: Optional[AsyncDriver] = None
         self.enabled = False
+        self._claim_constraints_checked = False
 
         if settings.NEO4J_URI and settings.NEO4J_USER and settings.NEO4J_PASSWORD:
             try:
@@ -255,6 +256,182 @@ class FoundryNeo4jService:
                     },
                 )
 
+    async def batch_sync_claims(
+        self,
+        *,
+        project_id: UUID,
+        theory_id: UUID,
+        owner_id: str,
+        paradigm: Dict[str, Any],
+        evidence_index: List[Dict[str, Any]],
+        categories: list[tuple[UUID, str]],
+    ) -> None:
+        """
+        Best-effort: persist auditable theory units as Claim nodes with SUPPORTED_BY edges.
+
+        This is intentionally derived data:
+        - Postgres remains the source of truth.
+        - Neo4j stores a traceable symbolic memory for explainability and UI ("Ver evidencia").
+        """
+        if not self.enabled or not self.driver:
+            return
+
+        await self._ensure_claim_constraints()
+
+        pid = str(project_id)
+        tid = str(theory_id)
+        oid = str(owner_id or "")
+
+        # Deterministic mapping from category name -> category_id for ABOUT edges.
+        cat_by_name = {name.strip().lower(): str(cid) for cid, name in categories if name}
+
+        evidence_score_by_fragment: dict[str, float] = {}
+        for ev in evidence_index or []:
+            fid = str(ev.get("fragment_id") or ev.get("id") or "").strip()
+            if not fid:
+                continue
+            try:
+                evidence_score_by_fragment[fid] = float(ev.get("score", 0.0))
+            except Exception:
+                continue
+
+        def _claim_id(kind: str, order: int, text: str) -> str:
+            # Stable id per theory + section + order + text.
+            base = f"{tid}:{kind}:{order}:{(text or '').strip()}"
+            return str(uuid.uuid5(uuid.UUID(tid), base))
+
+        def _items(section: str) -> list[dict]:
+            raw = paradigm.get(section) or []
+            return [r for r in raw if isinstance(r, dict)] if isinstance(raw, list) else []
+
+        now_iso = None
+        try:
+            # Avoid importing datetime; keep lightweight.
+            now_iso = __import__("datetime").datetime.utcnow().isoformat()
+        except Exception:
+            now_iso = None
+
+        claims: list[dict] = []
+        about_rows: list[dict] = []
+        support_rows: list[dict] = []
+
+        def _push_section(section: str, claim_type: str, text_key: str = "name") -> None:
+            for i, item in enumerate(_items(section)):
+                text = str(item.get(text_key) or item.get("text") or "").strip()
+                if not text:
+                    continue
+                cid = _claim_id(claim_type, i, text)
+                claims.append(
+                    {
+                        "id": cid,
+                        "type": claim_type,
+                        "section": section,
+                        "order": i,
+                        "text": text[:2000],
+                        "created_at": now_iso,
+                    }
+                )
+
+                name_for_about = str(item.get("name") or "").strip().lower()
+                cat_id = cat_by_name.get(name_for_about)
+                if cat_id:
+                    about_rows.append({"claim_id": cid, "category_id": cat_id})
+
+                ev_ids = item.get("evidence_ids") or []
+                if isinstance(ev_ids, list):
+                    rank = 0
+                    for fid in ev_ids:
+                        frag_id = str(fid).strip()
+                        if not frag_id:
+                            continue
+                        support_rows.append(
+                            {
+                                "claim_id": cid,
+                                "fragment_id": frag_id,
+                                "rank": rank,
+                                "score": evidence_score_by_fragment.get(frag_id, 0.0),
+                            }
+                        )
+                        rank += 1
+
+        _push_section("conditions", "condition", text_key="name")
+        _push_section("context", "condition", text_key="name")
+        _push_section("intervening_conditions", "condition", text_key="name")
+        _push_section("actions", "action", text_key="name")
+        _push_section("consequences", "consequence", text_key="name")
+        _push_section("propositions", "proposition", text_key="text")
+
+        if not claims:
+            return
+
+        async with self.driver.session() as session:
+            # Claim nodes
+            await self._run(
+                session,
+                """
+                UNWIND $claims AS c
+                MERGE (p:Project {id: $pid})
+                MERGE (cl:Claim {id: c.id})
+                SET cl.project_id = $pid,
+                    cl.theory_id = $tid,
+                    cl.owner_id = $oid,
+                    cl.claim_type = c.type,
+                    cl.section = c.section,
+                    cl.`order` = c.order,
+                    cl.text = c.text,
+                    cl.created_at = c.created_at
+                MERGE (p)-[:HAS_CLAIM]->(cl)
+                """,
+                {"pid": pid, "tid": tid, "oid": oid, "claims": claims},
+            )
+
+            if about_rows:
+                await self._run(
+                    session,
+                    """
+                    UNWIND $rows AS r
+                    MATCH (cl:Claim {id: r.claim_id})
+                    MATCH (cat:Category {id: r.category_id})
+                    MERGE (cl)-[:ABOUT]->(cat)
+                    """,
+                    {"rows": about_rows},
+                )
+
+            if support_rows:
+                await self._run(
+                    session,
+                    """
+                    UNWIND $rows AS r
+                    MATCH (cl:Claim {id: r.claim_id})
+                    MATCH (f:Fragment {id: r.fragment_id})
+                    MERGE (cl)-[sb:SUPPORTED_BY]->(f)
+                    SET sb.rank = r.rank,
+                        sb.score = r.score
+                    """,
+                    {"rows": support_rows},
+                )
+
+    async def _ensure_claim_constraints(self) -> None:
+        """
+        Best-effort uniqueness constraints for claim graph idempotency.
+        """
+        if not self.enabled or not self.driver or self._claim_constraints_checked:
+            return
+        try:
+            async with self.driver.session() as session:
+                await self._run(
+                    session,
+                    """
+                    CREATE CONSTRAINT claim_id_unique IF NOT EXISTS
+                    FOR (cl:Claim)
+                    REQUIRE cl.id IS UNIQUE
+                    """,
+                    {},
+                )
+            self._claim_constraints_checked = True
+        except Exception as e:
+            logger.warning("Neo4j claim constraint setup skipped: %s", str(e)[:300])
+
     async def ensure_project_node(self, project_id: UUID, name: str = "Unnamed Project"):
         """Ensures a project node exists before syncing related entities."""
         if not self.enabled:
@@ -442,6 +619,144 @@ class FoundryNeo4jService:
             "category_cooccurrence": cooccurrence_data,
             "gds": gds_meta,
         }
+
+    async def get_theory_claims_explain(
+        self,
+        *,
+        project_id: UUID,
+        theory_id: UUID,
+        owner_id: UUID,
+        limit: int = 500,
+        offset: int = 0,
+        section: str | None = None,
+        claim_type: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Explainability read model for UI:
+        Category -> Claim -> Fragment paths persisted in Neo4j.
+        """
+        if not self.enabled or not self.driver:
+            return {"total": 0, "claims": []}
+
+        section_norm = (section or "").strip().lower() or None
+        claim_type_norm = (claim_type or "").strip().lower() or None
+
+        count_query = """
+        MATCH (p:Project {id: $project_id})-[:HAS_CLAIM]->(cl:Claim)
+        WHERE cl.project_id = $project_id
+          AND cl.theory_id = $theory_id
+          AND cl.owner_id = $owner_id
+          AND ($section IS NULL OR cl.section = $section)
+          AND ($claim_type IS NULL OR cl.claim_type = $claim_type)
+        RETURN count(cl) AS total
+        """
+        count_rows = await self._execute_read(
+            count_query,
+            {
+                "project_id": str(project_id),
+                "theory_id": str(theory_id),
+                "owner_id": str(owner_id),
+                "section": section_norm,
+                "claim_type": claim_type_norm,
+            },
+        )
+        total = int((count_rows[0] or {}).get("total", 0)) if count_rows else 0
+
+        query = """
+        MATCH (p:Project {id: $project_id})-[:HAS_CLAIM]->(cl:Claim)
+        WHERE cl.project_id = $project_id
+          AND cl.theory_id = $theory_id
+          AND cl.owner_id = $owner_id
+          AND ($section IS NULL OR cl.section = $section)
+          AND ($claim_type IS NULL OR cl.claim_type = $claim_type)
+        OPTIONAL MATCH (cl)-[:ABOUT]->(cat:Category)
+        WITH cl, collect(DISTINCT {id: cat.id, name: cat.name}) AS categories
+        OPTIONAL MATCH (cl)-[sb:SUPPORTED_BY]->(f:Fragment)
+        WITH cl, categories,
+             collect(DISTINCT {
+               fragment_id: f.id,
+               text: f.text_snippet,
+               score: sb.score,
+               rank: sb.rank
+             }) AS evidence
+        RETURN
+          cl.id AS claim_id,
+          cl.claim_type AS claim_type,
+          cl.section AS section,
+          cl.`order` AS ord,
+          cl.text AS text,
+          categories,
+          evidence
+        ORDER BY
+          CASE cl.section
+            WHEN 'conditions' THEN 1
+            WHEN 'context' THEN 2
+            WHEN 'intervening_conditions' THEN 3
+            WHEN 'actions' THEN 4
+            WHEN 'consequences' THEN 5
+            WHEN 'propositions' THEN 6
+            ELSE 99
+          END ASC,
+          cl.`order` ASC
+        SKIP $offset
+        LIMIT $limit
+        """
+        rows = await self._execute_read(
+            query,
+            {
+                "project_id": str(project_id),
+                "theory_id": str(theory_id),
+                "owner_id": str(owner_id),
+                "section": section_norm,
+                "claim_type": claim_type_norm,
+                "offset": max(0, int(offset)),
+                "limit": max(1, int(limit)),
+            },
+        )
+
+        normalized: List[Dict[str, Any]] = []
+        for row in rows:
+            categories = []
+            for cat in (row.get("categories") or []):
+                if not isinstance(cat, dict):
+                    continue
+                if not cat.get("id") and not cat.get("name"):
+                    continue
+                categories.append(
+                    {
+                        "id": str(cat.get("id") or ""),
+                        "name": str(cat.get("name") or ""),
+                    }
+                )
+
+            evidence = []
+            for ev in (row.get("evidence") or []):
+                if not isinstance(ev, dict):
+                    continue
+                fragment_id = str(ev.get("fragment_id") or "").strip()
+                if not fragment_id:
+                    continue
+                evidence.append(
+                    {
+                        "fragment_id": fragment_id,
+                        "text": str(ev.get("text") or ""),
+                        "score": ev.get("score"),
+                        "rank": ev.get("rank"),
+                    }
+                )
+
+            normalized.append(
+                {
+                    "claim_id": str(row.get("claim_id") or ""),
+                    "claim_type": str(row.get("claim_type") or ""),
+                    "section": str(row.get("section") or ""),
+                    "order": int(row.get("ord") or 0),
+                    "text": str(row.get("text") or ""),
+                    "categories": categories,
+                    "evidence": evidence,
+                }
+            )
+        return {"total": total, "claims": normalized}
 
     async def close(self):
         """Closes the Neo4j driver connection."""

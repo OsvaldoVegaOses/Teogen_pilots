@@ -15,6 +15,12 @@ class _ScalarOneResult:
     def scalar_one_or_none(self):
         return self._value
 
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._value
+
 
 class _ScalarsResult:
     def __init__(self, values):
@@ -46,4 +52,4 @@ async def test_auto_code_interview_ensures_project_node(monkeypatch):
     await coding_engine.auto_code_interview(project_id, interview_id, db)
 
     ensure_project_node.assert_awaited_once_with(project_id, "Proyecto GT")
-    db.commit.assert_awaited_once()
+    db.commit.assert_not_called()

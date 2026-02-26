@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh  /// .\deploy_frontend_fixed.ps1
 # Script para desplegar el frontend de TheoGen en Azure
 
 Write-Host "===========================================" -ForegroundColor Green

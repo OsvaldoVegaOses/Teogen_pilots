@@ -13,9 +13,38 @@ import ExportPanel, { enqueueLocalExport } from "@/components/ExportPanel";
 
 const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
 type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
+type DashboardTab = "overview" | "codes" | "interviews" | "memos";
+type TheoryViewerStateSnapshot = {
+    sectionFilter: string;
+    claimTypeFilter: string;
+    page: number;
+    expanded: Record<string, boolean>;
+};
+const THEORY_VIEWER_STATE_STORAGE_KEY = "theory_viewer_state_v1";
+const DASHBOARD_UI_STATE_STORAGE_KEY = "dashboard_ui_state_v1";
+
+type DashboardUiStateSnapshot = {
+    selectedProjectId: string | null;
+    activeTab: DashboardTab;
+};
+type ResetUiAction = "active_theory" | "dashboard_ui" | "all";
+
+function isSameExpandedState(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
+    const aKeys = Object.keys(a || {});
+    const bKeys = Object.keys(b || {});
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+        if ((a || {})[key] !== (b || {})[key]) return false;
+    }
+    return true;
+}
 
 function isDomainTemplate(value: string): value is DomainTemplate {
     return (DOMAIN_TEMPLATES as readonly string[]).includes(value);
+}
+
+function isDashboardTab(value: string): value is DashboardTab {
+    return value === "overview" || value === "codes" || value === "interviews" || value === "memos";
 }
 
 export default function Dashboard() {
@@ -34,7 +63,7 @@ export default function Dashboard() {
     const [projects, setProjects] = useState<any[]>([]);
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"overview" | "codes" | "interviews" | "memos">("overview");
+    const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
     // Interviews tab state
     const [interviews, setInterviews] = useState<any[]>([]);
@@ -49,10 +78,122 @@ export default function Dashboard() {
     const [taskStep, setTaskStep] = useState<string>("");
     const [theoryDone, setTheoryDone] = useState(false);
     const [theoryFailed, setTheoryFailed] = useState(false);
+    const [showResetUiModal, setShowResetUiModal] = useState(false);
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
     const [logLines, setLogLines] = useState<string[]>([]);
+    const [theoryViewerStateByTheory, setTheoryViewerStateByTheory] = useState<Record<string, TheoryViewerStateSnapshot>>({});
     const prevStepRef = useRef<string>("");
     const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+    const activeTheoryViewerState =
+        activeTheory?.id && theoryViewerStateByTheory[activeTheory.id]
+            ? theoryViewerStateByTheory[activeTheory.id]
+            : undefined;
+
+    function resetDashboardUiState() {
+        setActiveTab("overview");
+        setSelectedProjectId(null);
+        setOpenInterviewId(null);
+        setTheoryDone(false);
+        setTheoryFailed(false);
+        setTaskProgress(null);
+        setTaskStep("");
+        setTheoryMessage("");
+        setLogLines([]);
+        setCurrentTaskId(null);
+        try {
+            localStorage.removeItem(DASHBOARD_UI_STATE_STORAGE_KEY);
+        } catch {
+            // noop
+        }
+    }
+
+    function resetTheoryViewerState(scope: "active_theory" | "all") {
+        if (!Object.keys(theoryViewerStateByTheory).length) return;
+        setTheoryViewerStateByTheory((prev) => {
+            if (scope === "all") {
+                return {};
+            }
+            if (scope === "active_theory") {
+                if (!activeTheory?.id) return prev;
+                const next = { ...prev };
+                delete next[activeTheory.id];
+                return next;
+            }
+            return prev;
+        });
+    }
+
+    function handleResetUiAction(action: ResetUiAction) {
+        if (action === "active_theory") {
+            resetTheoryViewerState("active_theory");
+        } else if (action === "dashboard_ui") {
+            resetDashboardUiState();
+        } else {
+            resetTheoryViewerState("all");
+            resetDashboardUiState();
+        }
+        setShowResetUiModal(false);
+    }
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(THEORY_VIEWER_STATE_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as Record<string, Partial<TheoryViewerStateSnapshot>>;
+            if (parsed && typeof parsed === "object") {
+                const normalized: Record<string, TheoryViewerStateSnapshot> = {};
+                for (const [theoryId, state] of Object.entries(parsed)) {
+                    normalized[theoryId] = {
+                        sectionFilter: state?.sectionFilter || "all",
+                        claimTypeFilter: state?.claimTypeFilter || "all",
+                        page: typeof state?.page === "number" ? state.page : 0,
+                        expanded: (state?.expanded && typeof state.expanded === "object") ? state.expanded : {},
+                    };
+                }
+                setTheoryViewerStateByTheory(normalized);
+            }
+        } catch {
+            localStorage.removeItem(THEORY_VIEWER_STATE_STORAGE_KEY);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(THEORY_VIEWER_STATE_STORAGE_KEY, JSON.stringify(theoryViewerStateByTheory));
+        } catch {
+            // noop
+        }
+    }, [theoryViewerStateByTheory]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(DASHBOARD_UI_STATE_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as Partial<DashboardUiStateSnapshot>;
+            if (parsed && typeof parsed === "object") {
+                if (typeof parsed.selectedProjectId === "string" || parsed.selectedProjectId === null) {
+                    setSelectedProjectId(parsed.selectedProjectId ?? null);
+                }
+                if (typeof parsed.activeTab === "string" && isDashboardTab(parsed.activeTab)) {
+                    setActiveTab(parsed.activeTab);
+                }
+            }
+        } catch {
+            localStorage.removeItem(DASHBOARD_UI_STATE_STORAGE_KEY);
+        }
+    }, []);
+
+    useEffect(() => {
+        const snapshot: DashboardUiStateSnapshot = {
+            selectedProjectId,
+            activeTab,
+        };
+        try {
+            localStorage.setItem(DASHBOARD_UI_STATE_STORAGE_KEY, JSON.stringify(snapshot));
+        } catch {
+            // noop
+        }
+    }, [selectedProjectId, activeTab]);
 
     // Fetch projects from backend
     useEffect(() => {
@@ -484,6 +625,13 @@ export default function Dashboard() {
                         >
                             + Nuevo Proyecto
                         </button>
+                        <button
+                            onClick={() => setShowResetUiModal(true)}
+                            className="rounded-2xl border border-amber-300 px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-all"
+                            title="Limpiar estado persistido de la UI"
+                        >
+                            Reset UI
+                        </button>
                     </div>
                 </header>
 
@@ -538,7 +686,30 @@ export default function Dashboard() {
                                 {/* Show active theory if available */}
                                 {activeTheory && (
                                     <div id="theory-viewer" className="col-span-2 mt-8">
-                                        <TheoryViewer projectId={selectedProjectId!} theory={activeTheory} />
+                                        <TheoryViewer
+                                            projectId={selectedProjectId!}
+                                            theory={activeTheory}
+                                            viewerState={activeTheoryViewerState}
+                                            onViewerStateChange={(state) => {
+                                                if (!activeTheory?.id) return;
+                                                setTheoryViewerStateByTheory((prev) => {
+                                                    const current = prev[activeTheory.id];
+                                                    if (
+                                                        current &&
+                                                        current.sectionFilter === state.sectionFilter &&
+                                                        current.claimTypeFilter === state.claimTypeFilter &&
+                                                        current.page === state.page &&
+                                                        isSameExpandedState(current.expanded, state.expanded)
+                                                    ) {
+                                                        return prev;
+                                                    }
+                                                    return {
+                                                        ...prev,
+                                                        [activeTheory.id]: state,
+                                                    };
+                                                });
+                                            }}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -767,6 +938,45 @@ export default function Dashboard() {
                     projectId={selectedProjectId}
                     onClose={() => setOpenInterviewId(null)}
                 />
+            )}
+
+            {showResetUiModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                        <h3 className="text-lg font-bold dark:text-white">Reset estado UI</h3>
+                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                            Elige qué estado persistido quieres limpiar.
+                        </p>
+                        <div className="mt-5 space-y-2">
+                            <button
+                                onClick={() => handleResetUiAction("active_theory")}
+                                className="w-full rounded-xl border border-zinc-200 px-4 py-2 text-left text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+                            >
+                                Solo teoría activa
+                            </button>
+                            <button
+                                onClick={() => handleResetUiAction("dashboard_ui")}
+                                className="w-full rounded-xl border border-zinc-200 px-4 py-2 text-left text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+                            >
+                                Solo UI dashboard
+                            </button>
+                            <button
+                                onClick={() => handleResetUiAction("all")}
+                                className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-left text-sm font-bold text-amber-800 hover:bg-amber-100"
+                            >
+                                Todo (UI + teoría)
+                            </button>
+                        </div>
+                        <div className="mt-5 flex justify-end">
+                            <button
+                                onClick={() => setShowResetUiModal(false)}
+                                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-500 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

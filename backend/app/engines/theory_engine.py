@@ -244,6 +244,65 @@ class TheoryGenerationEngine:
             out["intervening_conditions"] = []
         return out
 
+    async def repair_conditions_actions(
+        self,
+        *,
+        central_cat: str,
+        paradigm: Dict[str, Any],
+        evidence_index: List[Dict[str, Any]],
+        available_categories: List[str],
+        target_min_each: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        Best-effort repair: ensure conditions/actions exist and include evidence_ids.
+        Returns a dict with keys: conditions, actions (each list).
+        """
+        target_min_each = max(0, min(8, int(target_min_each)))
+        evidence_rule = (
+            "- Cada item DEBE incluir evidence_ids con al menos 1 id del evidence_index.\n"
+            if evidence_index
+            else "- Incluye evidence_ids (puede ser lista vacia si no hay evidencia_index).\n"
+        )
+
+        prompt = "".join(
+            [
+                "Reescribe SOLO los campos conditions y actions.\n",
+                "Reglas:\n",
+                "- NO usar terminos meta-metodologicos (entrevista, informante, identificacion, etc.).\n",
+                "- Usa nombres canonicos y consistentes.\n",
+                "- Usa solo categorias presentes en available_categories (no inventar nuevas).\n",
+                f"- Apunta a minimo {target_min_each} items en cada lista cuando haya material suficiente.\n",
+                evidence_rule,
+                "- Devuelve JSON valido y SOLO JSON con este schema:\n",
+                "{\n",
+                "  \"conditions\": [ { \"name\": \"string\", \"evidence_ids\": [\"...\"] } ],\n",
+                "  \"actions\": [ { \"name\": \"string\", \"evidence_ids\": [\"...\"] } ]\n",
+                "}\n\n",
+                f"selected_central_category: {central_cat}\n",
+                f"current_conditions: {paradigm.get('conditions')}\n",
+                f"current_actions: {paradigm.get('actions')}\n",
+                f"context: {paradigm.get('context')}\n",
+                f"intervening_conditions: {paradigm.get('intervening_conditions')}\n",
+                f"consequences: {paradigm.get('consequences')}\n",
+                f"propositions: {paradigm.get('propositions')}\n",
+                f"available_categories: {available_categories[:120]}\n",
+                f"evidence_index: {evidence_index}\n",
+            ]
+        )
+
+        messages = build_messages(get_system_prompt_for_step("gaps"), prompt)
+        raw = await self.ai.reasoning_fast(messages=messages)
+        repaired = safe_json_loads(raw) or {}
+        out = {
+            "conditions": repaired.get("conditions", []),
+            "actions": repaired.get("actions", []),
+        }
+        if not isinstance(out["conditions"], list):
+            out["conditions"] = []
+        if not isinstance(out["actions"], list):
+            out["actions"] = []
+        return out
+
     async def repair_propositions(
         self,
         *,
@@ -352,6 +411,7 @@ class TheoryGenerationEngine:
         central_cat: str,
         other_cats: list,
         template_key: str = "generic",
+        use_model_router: bool = True,
     ) -> dict:
         logger.info(
             "Building Straussian paradigm (template=%s, prompt_version=%s)",
@@ -360,12 +420,19 @@ class TheoryGenerationEngine:
         )
 
         messages = self.build_paradigm_messages(central_cat, other_cats, template_key)
-        route_result = await self.router.route_and_generate(
-            task_type="qualitative_modeling",
-            prompt=messages[1]["content"],
-            system_prompt=messages[0]["content"],
+        if use_model_router:
+            route_result = await self.router.route_and_generate(
+                task_type="qualitative_modeling",
+                prompt=messages[1]["content"],
+                system_prompt=messages[0]["content"],
+            )
+            return safe_json_loads(route_result["result"])
+
+        response = await self.ai.reasoning_advanced(
+            messages=messages,
+            max_completion_tokens=settings.THEORY_LLM_MAX_OUTPUT_TOKENS,
         )
-        return safe_json_loads(route_result["result"])
+        return safe_json_loads(response)
 
     async def analyze_saturation_and_gaps(
         self,

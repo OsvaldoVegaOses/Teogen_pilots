@@ -299,6 +299,7 @@ class CodingEngine:
         embed_texts: list[str] = []
         embed_frag_ids: list[UUID] = []
         embed_code_labels: list[list[str]] = []
+        embed_created_at: list[str | None] = []
 
         for fragment, coding_result in llm_results:
             labels_this_frag: list[str] = []
@@ -340,6 +341,7 @@ class CodingEngine:
             embed_texts.append(fragment.text)
             embed_frag_ids.append(fragment.id)
             embed_code_labels.append(labels_this_frag)
+            embed_created_at.append(fragment.created_at.isoformat() if getattr(fragment, "created_at", None) else None)
 
         try:
             # Embeddings can be a long pole; guard with timeouts/retries inside the service.
@@ -348,10 +350,19 @@ class CodingEngine:
                 PointStruct(
                     id=str(fid),
                     vector=vec,
-                    payload={"text": txt, "project_id": str(project_id), "codes": labels},
+                    payload={
+                        "text": txt,
+                        "project_id": str(project_id),
+                        "owner_id": str(project.owner_id) if getattr(project, "owner_id", None) else None,
+                        "interview_id": str(interview_id),
+                        "fragment_id": str(fid),
+                        "source_type": "fragment",
+                        "created_at": created_at,
+                        "codes": labels,
+                    },
                 )
-                for fid, txt, labels, vec in zip(
-                    embed_frag_ids, embed_texts, embed_code_labels, all_embeddings
+                for fid, txt, labels, created_at, vec in zip(
+                    embed_frag_ids, embed_texts, embed_code_labels, embed_created_at, all_embeddings
                 )
             ]
             if qdrant_points:

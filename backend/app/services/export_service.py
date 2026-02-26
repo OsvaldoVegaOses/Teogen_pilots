@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 I18N = {
     "es": {
-        "report_title": "Informe de Teoria Fundamentada",
+        "report_title": "Informe de Teoría Fundamentada",
         "project": "Proyecto",
         "date": "Fecha de Generacion",
         "central_category": "Categoria Central",

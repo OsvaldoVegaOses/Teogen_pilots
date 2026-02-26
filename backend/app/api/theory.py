@@ -20,8 +20,15 @@ from ..core.settings import settings
 from ..database import get_db, get_session_local
 from ..engines.theory_pipeline import TheoryPipeline, TheoryPipelineError
 from ..models.models import Project, Theory
-from ..schemas.theory import TheoryGenerateRequest, TheoryResponse
+from ..schemas.theory import (
+    TheoryGenerateRequest,
+    TheoryResponse,
+    TheoryClaimsExplainResponse,
+    TheoryJudgeRolloutResponse,
+    TheoryPipelineSloResponse,
+)
 from ..services.export_service import export_service
+from ..services.neo4j_service import neo4j_service
 from ..services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
@@ -467,6 +474,391 @@ async def list_theories(
         .order_by(Theory.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.get(
+    "/{project_id}/theories/judge-rollout",
+    response_model=TheoryJudgeRolloutResponse,
+)
+async def get_theory_judge_rollout(
+    project_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    project_result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
+    )
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    policy = await theory_pipeline.get_judge_rollout_policy(project_id=project_id, db=db)
+
+    latest_theory = (
+        await db.execute(
+            select(Theory)
+            .where(Theory.project_id == project_id)
+            .order_by(Theory.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+
+    latest_validation: Dict[str, Any] = {}
+    latest_theory_id: Optional[UUID] = None
+    latest_created_at: Optional[datetime] = None
+    if latest_theory:
+        latest_theory_id = latest_theory.id
+        latest_created_at = latest_theory.created_at
+        validation = latest_theory.validation or {}
+        if isinstance(validation, dict):
+            latest_validation = {
+                "judge": validation.get("judge", {}),
+                "judge_rollout": validation.get("judge_rollout", {}),
+                "claim_metrics": validation.get("claim_metrics", {}),
+                "quality_metrics": validation.get("quality_metrics", {}),
+                "neo4j_claim_sync": validation.get("neo4j_claim_sync", {}),
+                "qdrant_claim_sync": validation.get("qdrant_claim_sync", {}),
+            }
+
+    return {
+        "project_id": project_id,
+        "policy": policy,
+        "latest_theory_id": latest_theory_id,
+        "latest_created_at": latest_created_at,
+        "latest_validation": latest_validation,
+    }
+
+
+def _percentile(values: List[float], q: float) -> float:
+    clean = sorted(float(v) for v in values if v is not None)
+    if not clean:
+        return 0.0
+    if len(clean) == 1:
+        return round(clean[0], 2)
+    q = max(0.0, min(100.0, float(q)))
+    rank = int(round((q / 100.0) * (len(clean) - 1)))
+    return round(clean[rank], 2)
+
+
+@router.get(
+    "/{project_id}/theories/pipeline-slo",
+    response_model=TheoryPipelineSloResponse,
+)
+async def get_theory_pipeline_slo(
+    project_id: UUID,
+    window: int = Query(20, ge=5, le=200),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    project_result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
+    )
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    rows = (
+        await db.execute(
+            select(Theory.id, Theory.created_at, Theory.validation)
+            .where(Theory.project_id == project_id)
+            .order_by(Theory.created_at.desc())
+            .limit(window)
+        )
+    ).all()
+
+    if not rows:
+        return {
+            "project_id": project_id,
+            "window_size": int(window),
+            "sample_size": 0,
+            "latest_theory_id": None,
+            "latest_created_at": None,
+            "latency_p95_ms": {},
+            "latency_p50_ms": {},
+            "quality": {},
+            "reliability": {},
+        }
+
+    latency_keys = [
+        "category_summary_sync_ms",
+        "neo4j_metrics_ms",
+        "qdrant_retrieval_ms",
+        "identify_llm_ms",
+        "paradigm_llm_ms",
+        "gaps_llm_ms",
+    ]
+    latency_values: Dict[str, List[float]] = {k: [] for k in latency_keys}
+
+    warn_only_runs = 0
+    fallback_network = 0
+    fallback_evidence = 0
+    neo4j_claim_sync_failed = 0
+    qdrant_claim_sync_failed = 0
+    claims_without_evidence_total = 0
+
+    for _theory_id, _created_at, validation in rows:
+        if not isinstance(validation, dict):
+            continue
+        runtime = validation.get("pipeline_runtime") or {}
+        latency = runtime.get("latency_ms") or {}
+        for key in latency_keys:
+            value = latency.get(key)
+            if isinstance(value, (int, float)):
+                latency_values[key].append(float(value))
+
+        judge = validation.get("judge") or {}
+        if bool(judge.get("warn_only")):
+            warn_only_runs += 1
+
+        routing = validation.get("deterministic_routing") or {}
+        execution = routing.get("execution") or {}
+        if str(execution.get("network_metrics_source") or "").strip().lower() == "sql_fallback":
+            fallback_network += 1
+        if str(execution.get("semantic_evidence_source") or "").strip().lower() == "sql_fallback":
+            fallback_evidence += 1
+
+        neo4j_claim_sync = validation.get("neo4j_claim_sync") or {}
+        if bool(neo4j_claim_sync.get("neo4j_sync_failed")):
+            neo4j_claim_sync_failed += 1
+        qdrant_claim_sync = validation.get("qdrant_claim_sync") or {}
+        if bool(qdrant_claim_sync.get("qdrant_sync_failed")):
+            qdrant_claim_sync_failed += 1
+
+        claim_metrics = validation.get("claim_metrics") or {}
+        claims_without_evidence_total += int(claim_metrics.get("claims_without_evidence") or 0)
+
+    sample_size = len(rows)
+    latency_p95 = {k: _percentile(v, 95) for k, v in latency_values.items() if v}
+    latency_p50 = {k: _percentile(v, 50) for k, v in latency_values.items() if v}
+
+    latest_theory_id, latest_created_at, _ = rows[0]
+
+    return {
+        "project_id": project_id,
+        "window_size": int(window),
+        "sample_size": sample_size,
+        "latest_theory_id": latest_theory_id,
+        "latest_created_at": latest_created_at,
+        "latency_p95_ms": latency_p95,
+        "latency_p50_ms": latency_p50,
+        "quality": {
+            "claims_without_evidence_total": int(claims_without_evidence_total),
+            "claims_without_evidence_rate": round(claims_without_evidence_total / max(1, sample_size), 3),
+            "judge_warn_only_runs": int(warn_only_runs),
+            "judge_warn_only_rate": round(warn_only_runs / max(1, sample_size), 3),
+        },
+        "reliability": {
+            "network_sql_fallback_runs": int(fallback_network),
+            "evidence_sql_fallback_runs": int(fallback_evidence),
+            "network_sql_fallback_rate": round(fallback_network / max(1, sample_size), 3),
+            "evidence_sql_fallback_rate": round(fallback_evidence / max(1, sample_size), 3),
+            "neo4j_claim_sync_failed_runs": int(neo4j_claim_sync_failed),
+            "qdrant_claim_sync_failed_runs": int(qdrant_claim_sync_failed),
+        },
+    }
+
+
+def _build_claims_from_validation_fallback(theory: Theory) -> List[Dict[str, Any]]:
+    model_json = theory.model_json or {}
+    validation = theory.validation or {}
+    evidence_index = (
+        validation.get("network_metrics_summary", {}).get("evidence_index", [])
+        if isinstance(validation, dict)
+        else []
+    )
+    evidence_map = {}
+    for ev in evidence_index or []:
+        if not isinstance(ev, dict):
+            continue
+        fid = str(ev.get("fragment_id") or ev.get("id") or "").strip()
+        if not fid:
+            continue
+        evidence_map[fid] = {
+            "fragment_id": fid,
+            "score": ev.get("score"),
+            "rank": None,
+            "text": ev.get("text"),
+            "interview_id": ev.get("interview_id"),
+        }
+
+    section_to_type = {
+        "conditions": "condition",
+        "context": "condition",
+        "intervening_conditions": "condition",
+        "actions": "action",
+        "consequences": "consequence",
+        "propositions": "proposition",
+    }
+    items: List[Dict[str, Any]] = []
+    for section, claim_type in section_to_type.items():
+        raw = model_json.get(section) or []
+        if not isinstance(raw, list):
+            continue
+        for idx, entry in enumerate(raw):
+            if not isinstance(entry, dict):
+                continue
+            text = str(entry.get("text") or entry.get("name") or "").strip()
+            if not text:
+                continue
+            evidence = []
+            for rank, fid in enumerate(entry.get("evidence_ids") or []):
+                fragment_id = str(fid).strip()
+                if not fragment_id:
+                    continue
+                base = evidence_map.get(
+                    fragment_id,
+                    {
+                        "fragment_id": fragment_id,
+                        "score": None,
+                        "rank": None,
+                        "text": None,
+                        "interview_id": None,
+                    },
+                )
+                evidence.append({**base, "rank": rank})
+
+            category_name = str(entry.get("name") or "").strip()
+            categories = [{"id": None, "name": category_name}] if category_name and section != "propositions" else []
+            path_examples = []
+            for ev in evidence[:3]:
+                fragment_id = ev.get("fragment_id")
+                if categories:
+                    path_examples.append(f"{categories[0].get('name')} -> {text} -> {fragment_id}")
+                else:
+                    path_examples.append(f"{text} -> {fragment_id}")
+
+            items.append(
+                {
+                    "claim_id": f"fallback:{theory.id}:{section}:{idx}",
+                    "claim_type": claim_type,
+                    "section": section,
+                    "order": idx,
+                    "text": text,
+                    "categories": categories,
+                    "evidence": evidence,
+                    "path_examples": path_examples,
+                }
+            )
+    return items
+
+
+@router.get(
+    "/{project_id}/theories/{theory_id}/claims/explain",
+    response_model=TheoryClaimsExplainResponse,
+)
+async def explain_theory_claims(
+    project_id: UUID,
+    theory_id: UUID,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=5000),
+    section: Optional[str] = Query(None, pattern="^(conditions|context|intervening_conditions|actions|consequences|propositions)$"),
+    claim_type: Optional[str] = Query(None, pattern="^(condition|action|consequence|proposition|gap)$"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Theory, Project)
+        .join(Project, Theory.project_id == Project.id)
+        .where(
+            Theory.id == theory_id,
+            Theory.project_id == project_id,
+            Project.owner_id == user.user_uuid,
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Theory or Project not found")
+    theory, _project = row
+
+    source = "validation_fallback"
+    all_claims = _build_claims_from_validation_fallback(theory)
+    if section:
+        all_claims = [claim for claim in all_claims if str(claim.get("section") or "") == section]
+    if claim_type:
+        all_claims = [claim for claim in all_claims if str(claim.get("claim_type") or "") == claim_type]
+    total = len(all_claims)
+    claims = all_claims[offset : offset + limit]
+
+    try:
+        neo_claims = await neo4j_service.get_theory_claims_explain(
+            project_id=project_id,
+            theory_id=theory_id,
+            owner_id=user.user_uuid,
+            limit=limit,
+            offset=offset,
+            section=section,
+            claim_type=claim_type,
+        )
+    except Exception as e:
+        logger.warning(
+            "Neo4j explain failed project_id=%s theory_id=%s: %s",
+            project_id,
+            theory_id,
+            str(e)[:300],
+        )
+        neo_claims = {"total": 0, "claims": []}
+
+    if isinstance(neo_claims, dict):
+        neo_claims_rows = neo_claims.get("claims") or []
+        neo_total = int(neo_claims.get("total") or 0)
+    else:
+        neo_claims_rows = neo_claims or []
+        neo_total = len(neo_claims_rows)
+
+    if neo_claims_rows:
+        source = "neo4j"
+        total = neo_total
+        claims = []
+        for claim in neo_claims_rows:
+            categories = [
+                {"id": str(cat.get("id") or ""), "name": str(cat.get("name") or "")}
+                for cat in (claim.get("categories") or [])
+                if isinstance(cat, dict)
+            ]
+            evidence = [
+                {
+                    "fragment_id": str(ev.get("fragment_id") or ""),
+                    "score": ev.get("score"),
+                    "rank": ev.get("rank"),
+                    "text": ev.get("text"),
+                    "interview_id": None,
+                }
+                for ev in (claim.get("evidence") or [])
+                if isinstance(ev, dict) and str(ev.get("fragment_id") or "").strip()
+            ]
+            path_examples = []
+            for ev in evidence[:3]:
+                if categories:
+                    path_examples.append(
+                        f"{categories[0].get('name') or 'Category'} -> {claim.get('text') or ''} -> {ev.get('fragment_id')}"
+                    )
+                else:
+                    path_examples.append(f"{claim.get('text') or ''} -> {ev.get('fragment_id')}")
+
+            claims.append(
+                {
+                    "claim_id": str(claim.get("claim_id") or ""),
+                    "claim_type": str(claim.get("claim_type") or ""),
+                    "section": str(claim.get("section") or ""),
+                    "order": int(claim.get("order") or 0),
+                    "text": str(claim.get("text") or ""),
+                    "categories": categories,
+                    "evidence": evidence,
+                    "path_examples": path_examples,
+                }
+            )
+
+    return {
+        "project_id": project_id,
+        "theory_id": theory_id,
+        "source": source,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + len(claims)) < total,
+        "section_filter": section,
+        "claim_type_filter": claim_type,
+        "claim_count": len(claims),
+        "claims": claims,
+    }
 
 
 @router.post("/{project_id}/theories/{theory_id}/export")

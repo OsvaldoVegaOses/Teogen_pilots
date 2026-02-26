@@ -139,6 +139,7 @@ az deployment group create `
 > ```powershell
 > $WORKER_PID = az containerapp show -g $RG -n theogen-theory-worker --query identity.principalId -o tsv
 > az role assignment create --assignee $WORKER_PID --role "AcrPull" --scope $ACR_ID
+
 > ```
 
 ```powershell
@@ -233,3 +234,16 @@ ext_poll_seconds + backoff adaptativo frontend.
 - Contrato API compatible con clientes actuales.
 - Mejoras de rendimiento y robustez aplicadas en codificacion, teorizacion, sincronizacion Neo4j y polling frontend.
 
+
+
+
+######
+Verificar secreto Redis en Key Vault (requerido solo para modo Celery):
+az keyvault secret show --vault-name theoGenprod --name azure-redis-key --query "value" -o tsv
+
+Cuando se quiera activar el modo distribuido — deploy del worker + habilitar Celery en el backend:
+az deployment group create -g theogen-rg-eastus --template-file infra/examples/deploy-theogen-worker.bicep --parameters managedEnvironmentId=$ENV_ID keyVaultId=$KV_ID image=$IMAGE redisHost=$REDIS_HOST
+az containerapp update -g theogen-rg-eastus -n theogen-backend --set-env-vars THEORY_USE_CELERY=true
+
+El modo local (THEORY_USE_CELERY=false) seguirá funcionando tras el deploy del backend. El modo Celery es opcional hasta que decidas escalar.
+#####

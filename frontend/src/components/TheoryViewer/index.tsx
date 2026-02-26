@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "@/components/InterviewModal";
 
@@ -17,14 +17,81 @@ interface TheoryViewerProps {
     projectId: string;
     theory: Theory;
     onExportComplete?: () => void;
+    viewerState?: {
+        sectionFilter?: string;
+        claimTypeFilter?: string;
+        page?: number;
+        expanded?: Record<string, boolean>;
+    };
+    onViewerStateChange?: (state: {
+        sectionFilter: string;
+        claimTypeFilter: string;
+        page: number;
+        expanded: Record<string, boolean>;
+    }) => void;
 }
 
-export default function TheoryViewer({ projectId, theory, onExportComplete }: TheoryViewerProps) {
+interface ClaimExplainEvidence {
+    fragment_id: string;
+    score?: number;
+    rank?: number;
+    text?: string;
+    interview_id?: string;
+}
+
+interface ClaimExplainItem {
+    claim_id: string;
+    claim_type: string;
+    section: string;
+    order: number;
+    text: string;
+    categories: Array<{ id?: string; name?: string }>;
+    evidence: ClaimExplainEvidence[];
+    path_examples?: string[];
+}
+
+interface ClaimExplainResponse {
+    source: string;
+    total?: number;
+    limit?: number;
+    offset?: number;
+    has_more?: boolean;
+    section_filter?: string | null;
+    claim_type_filter?: string | null;
+    claim_count: number;
+    claims: ClaimExplainItem[];
+}
+
+const CLAIMS_PAGE_SIZE = 10;
+
+function isSameExpandedState(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+        if (a[key] !== b[key]) return false;
+    }
+    return true;
+}
+
+export default function TheoryViewer({
+    projectId,
+    theory,
+    onExportComplete,
+    viewerState,
+    onViewerStateChange,
+}: TheoryViewerProps) {
     const [isExporting, setIsExporting] = useState(false);
     const [exportingFormat, setExportingFormat] = useState<"pdf" | "pptx" | "xlsx" | "png">("pdf");
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const [expanded, setExpanded] = useState<Record<string, boolean>>(viewerState?.expanded || {});
     const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
     const [highlightFragmentId, setHighlightFragmentId] = useState<string | null>(null);
+    const [claimsData, setClaimsData] = useState<ClaimExplainResponse | null>(null);
+    const [claimsLoading, setClaimsLoading] = useState(false);
+    const [claimsError, setClaimsError] = useState<string | null>(null);
+    const [claimsSectionFilter, setClaimsSectionFilter] = useState<string>(viewerState?.sectionFilter || "all");
+    const [claimsTypeFilter, setClaimsTypeFilter] = useState<string>(viewerState?.claimTypeFilter || "all");
+    const [claimsPage, setClaimsPage] = useState(viewerState?.page || 0);
 
     const toDisplayText = (value: any): string => {
         if (value == null) return "";
@@ -67,6 +134,66 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
 
     const toggle = (key: string) => setExpanded((p) => ({ ...p, [key]: !p[key] }));
 
+    useEffect(() => {
+        const nextSection = viewerState?.sectionFilter || "all";
+        const nextType = viewerState?.claimTypeFilter || "all";
+        const nextPage = viewerState?.page || 0;
+        const nextExpanded = viewerState?.expanded || {};
+        setClaimsSectionFilter((prev) => (prev === nextSection ? prev : nextSection));
+        setClaimsTypeFilter((prev) => (prev === nextType ? prev : nextType));
+        setClaimsPage((prev) => (prev === nextPage ? prev : nextPage));
+        setExpanded((prev) => (isSameExpandedState(prev, nextExpanded) ? prev : nextExpanded));
+    }, [theory?.id, viewerState?.sectionFilter, viewerState?.claimTypeFilter, viewerState?.page, viewerState?.expanded]);
+
+    useEffect(() => {
+        if (!onViewerStateChange) return;
+        onViewerStateChange({
+            sectionFilter: claimsSectionFilter,
+            claimTypeFilter: claimsTypeFilter,
+            page: claimsPage,
+            expanded,
+        });
+    }, [claimsSectionFilter, claimsTypeFilter, claimsPage, expanded, onViewerStateChange]);
+
+    useEffect(() => {
+        let ignore = false;
+        const loadClaimsExplain = async () => {
+            if (!projectId || !theory?.id) return;
+            setClaimsLoading(true);
+            setClaimsError(null);
+            try {
+                const params = new URLSearchParams();
+                params.set("limit", String(CLAIMS_PAGE_SIZE));
+                params.set("offset", String(claimsPage * CLAIMS_PAGE_SIZE));
+                if (claimsSectionFilter !== "all") params.set("section", claimsSectionFilter);
+                if (claimsTypeFilter !== "all") params.set("claim_type", claimsTypeFilter);
+
+                const response = await apiClient(
+                    `/projects/${projectId}/theories/${theory.id}/claims/explain?${params.toString()}`,
+                    { method: "GET" }
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = (await response.json()) as ClaimExplainResponse;
+                if (!ignore) {
+                    setClaimsData(data);
+                }
+            } catch (error) {
+                if (!ignore) {
+                    setClaimsError("No se pudo cargar la evidencia por claim.");
+                    setClaimsData(null);
+                }
+            } finally {
+                if (!ignore) setClaimsLoading(false);
+            }
+        };
+        loadClaimsExplain();
+        return () => {
+            ignore = true;
+        };
+    }, [projectId, theory?.id, claimsPage, claimsSectionFilter, claimsTypeFilter]);
+
     const networkSummary = theory?.validation?.network_metrics_summary || {};
     const counts = networkSummary?.counts || {};
     const centrality = asItems(networkSummary?.category_centrality_top);
@@ -90,6 +217,16 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
             consWithEvidence,
         };
     })();
+
+    const claimsTotal = claimsData?.total ?? claimsData?.claim_count ?? 0;
+    const claimsOffset = claimsData?.offset ?? claimsPage * CLAIMS_PAGE_SIZE;
+    const claimsCount = claimsData?.claim_count ?? 0;
+    const claimsFrom = claimsTotal > 0 ? claimsOffset + 1 : 0;
+    const claimsTo = claimsTotal > 0 ? claimsOffset + claimsCount : 0;
+    const claimsHasMore =
+        typeof claimsData?.has_more === "boolean"
+            ? claimsData.has_more
+            : claimsOffset + claimsCount < claimsTotal;
 
     const displayModelName = (name?: string) => {
         if (!name) return "";
@@ -398,6 +535,117 @@ export default function TheoryViewer({ projectId, theory, onExportComplete }: Th
                                 <button onClick={() => toggle("evidence")} className="mt-2 text-xs font-bold text-indigo-600">
                                     {expanded.evidence ? "Ver menos" : "Ver mas"}
                                 </button>
+                            </div>
+
+                            <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                    <div>
+                                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Ver evidencia por claim</div>
+                                        <div className="text-[11px] text-zinc-500">
+                                            Fuente: {claimsData?.source || "cargando"} · Total: {claimsTotal}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={claimsSectionFilter}
+                                            onChange={(e) => {
+                                                setClaimsSectionFilter(e.target.value);
+                                                setClaimsPage(0);
+                                            }}
+                                            className="text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1"
+                                        >
+                                            <option value="all">Seccion: Todas</option>
+                                            <option value="conditions">Condiciones</option>
+                                            <option value="context">Contexto</option>
+                                            <option value="intervening_conditions">Intervinientes</option>
+                                            <option value="actions">Acciones</option>
+                                            <option value="consequences">Consecuencias</option>
+                                            <option value="propositions">Proposiciones</option>
+                                        </select>
+                                        <select
+                                            value={claimsTypeFilter}
+                                            onChange={(e) => {
+                                                setClaimsTypeFilter(e.target.value);
+                                                setClaimsPage(0);
+                                            }}
+                                            className="text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1"
+                                        >
+                                            <option value="all">Tipo: Todos</option>
+                                            <option value="condition">Condition</option>
+                                            <option value="action">Action</option>
+                                            <option value="consequence">Consequence</option>
+                                            <option value="proposition">Proposition</option>
+                                            <option value="gap">Gap</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {claimsLoading ? (
+                                    <div className="text-sm text-zinc-500">Cargando evidencia por claim...</div>
+                                ) : claimsError ? (
+                                    <div className="text-sm text-amber-600">{claimsError}</div>
+                                ) : (
+                                    <>
+                                        {asItems(claimsData?.claims).length === 0 ? (
+                                            <div className="text-sm text-zinc-500">Sin claims para los filtros seleccionados.</div>
+                                        ) : (
+                                            <div className={`space-y-3 ${expanded.claimsExplain ? "" : "max-h-80 overflow-auto"}`}>
+                                                {asItems(claimsData?.claims).map((claim: ClaimExplainItem, idx: number) => (
+                                                    <div key={`${claim.claim_id || idx}`} className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
+                                                        <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 break-words">
+                                                            [{claim.section}] {claim.text}
+                                                        </div>
+                                                        {asItems(claim.categories).length > 0 && (
+                                                            <div className="mt-1 text-[11px] text-zinc-500 break-words">
+                                                                Categorias: {asItems(claim.categories).map((cat: any) => cat?.name || cat?.id).filter(Boolean).join(", ")}
+                                                            </div>
+                                                        )}
+                                                        <div className="mt-1 space-y-1">
+                                                            {asItems(claim.evidence).slice(0, 5).map((ev: ClaimExplainEvidence, j: number) => (
+                                                                <div key={`${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                                                                    <div>
+                                                                        fragment_id: {ev.fragment_id} · score: {ev.score ?? ""} · rank: {ev.rank ?? ""}
+                                                                    </div>
+                                                                    {ev.text && <div className="break-words whitespace-pre-wrap">{ev.text}</div>}
+                                                                    {ev.fragment_id && (
+                                                                        <button
+                                                                            onClick={() => openFragmentInTranscript(String(ev.fragment_id))}
+                                                                            className="mt-1 text-[11px] font-bold text-indigo-600"
+                                                                        >
+                                                                            Abrir en transcripcion
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="mt-3 flex items-center justify-between">
+                                            <button
+                                                onClick={() => setClaimsPage((p) => Math.max(0, p - 1))}
+                                                disabled={claimsPage <= 0 || claimsLoading}
+                                                className="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 disabled:opacity-50"
+                                            >
+                                                Anterior
+                                            </button>
+                                            <div className="text-[11px] text-zinc-500">
+                                                Mostrando {claimsFrom}-{claimsTo} de {claimsTotal}
+                                            </div>
+                                            <button
+                                                onClick={() => setClaimsPage((p) => p + 1)}
+                                                disabled={!claimsHasMore || claimsLoading}
+                                                className="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 disabled:opacity-50"
+                                            >
+                                                Siguiente
+                                            </button>
+                                        </div>
+                                        <button onClick={() => toggle("claimsExplain")} className="mt-2 text-xs font-bold text-indigo-600">
+                                            {expanded.claimsExplain ? "Ver menos" : "Ver mas"}
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

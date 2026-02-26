@@ -27,7 +27,8 @@ def test_budget_no_change_when_under_limit():
 
 
 def test_budget_degrades_when_over_limit():
-    state = {"text": "x" * 16000}
+    # Use a size that reliably exceeds the budget under tiktoken for this model.
+    state = {"text": "x" * 64000}
 
     def builder():
         return [{"role": "user", "content": state["text"]}]

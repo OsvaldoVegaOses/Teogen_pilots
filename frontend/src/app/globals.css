@@ -28,3 +28,88 @@ body {
 .progress-bar {
   width: var(--progress-width, 0%);
 }
+
+@keyframes ambientFlow {
+  0% {
+    transform: translateX(-20%) translateY(0);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateX(0%) translateY(-6px);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(20%) translateY(0);
+    opacity: 0.2;
+  }
+}
+
+@keyframes ambientPulse {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.ambient-line {
+  animation: ambientFlow 10s ease-in-out infinite;
+}
+
+.ambient-glow {
+  animation: ambientPulse 6s ease-in-out infinite;
+}
+
+@keyframes statusDotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.45;
+  }
+}
+
+@keyframes statusSweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+.status-dot-pulse {
+  animation: statusDotPulse 2.8s ease-in-out infinite;
+}
+
+.status-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.18), transparent);
+  animation: statusSweep 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-line,
+  .ambient-glow,
+  .status-dot-pulse,
+  .status-sweep::after {
+    animation: none !important;
+  }
+}
