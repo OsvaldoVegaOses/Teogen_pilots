@@ -38,9 +38,12 @@ CLIENT_ID = settings.AZURE_AD_CLIENT_ID
 
 # Azure AD OpenID Connect endpoints
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-JWKS_URL = f"{AUTHORITY}/discovery/v2.0/keys"
+# Use 'common' JWKS endpoint so keys from both org and personal account tenants are available
+JWKS_URL = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
 ISSUER_V1 = f"https://sts.windows.net/{TENANT_ID}/"
 ISSUER_V2 = f"https://login.microsoftonline.com/{TENANT_ID}/v2.0"
+# Personal Microsoft Account (MSA) tokens are issued by the consumers tenant (fixed ID)
+MSA_ISSUER_V2 = "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
 
 # ──────────────────────────────────────────────
 # JWKS Key Cache
@@ -192,7 +195,7 @@ async def get_current_user(
             signing_key,
             algorithms=["RS256"],
             audience=CLIENT_ID,
-            issuer=[ISSUER_V1, ISSUER_V2],
+            issuer=[ISSUER_V1, ISSUER_V2, MSA_ISSUER_V2],
             options={
                 "verify_at_hash": False,  # ID tokens from SPA may not include at_hash
             },
