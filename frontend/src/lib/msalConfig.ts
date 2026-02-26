@@ -37,3 +37,8 @@ export const msalConfig: Configuration = {
 export const loginRequest = {
     scopes: ["openid", "profile", "email"],
 };
+
+export const googleLoginRequest = {
+    scopes: ["openid", "profile", "email"],
+    domainHint: "google.com",
+};
