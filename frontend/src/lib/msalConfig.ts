@@ -40,5 +40,8 @@ export const loginRequest = {
 
 export const googleLoginRequest = {
     scopes: ["openid", "profile", "email"],
+    // Must use the specific tenant (not 'common') so Azure AD knows which
+    // External Identities Google federation to invoke
+    authority: "https://login.microsoftonline.com/3e151d68-e5ed-4878-932d-251fe1b0eaf1",
     domainHint: "google.com",
 };
