@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 
 type TaskRecord = { task_id: string, created_at: string };
+type ExportStatus = {
+    status?: string;
+    result?: { download_url?: string };
+};
 
 function loadTasks(): TaskRecord[] {
     try {
@@ -19,9 +23,10 @@ function saveTask(t: TaskRecord) {
     localStorage.setItem('export_tasks', JSON.stringify(cur.slice(0, 50)));
 }
 
-export default function ExportPanel({ projectId }: { projectId?: string | null }) {
-    const [tasks, setTasks] = useState<TaskRecord[]>(loadTasks());
-    const [statuses, setStatuses] = useState<Record<string, any>>({});
+export default function ExportPanel({ projectId: _projectId }: { projectId?: string | null }) {
+    void _projectId;
+    const [tasks] = useState<TaskRecord[]>(loadTasks());
+    const [statuses, setStatuses] = useState<Record<string, ExportStatus>>({});
 
     useEffect(() => {
         const iv = setInterval(() => {
@@ -32,7 +37,7 @@ export default function ExportPanel({ projectId }: { projectId?: string | null }
                         const data = await resp.json();
                         setStatuses(s => ({ ...s, [t.task_id]: data }));
                     }
-                } catch (e) { }
+                } catch { }
             });
         }, 3000);
         return () => clearInterval(iv);
@@ -44,7 +49,7 @@ export default function ExportPanel({ projectId }: { projectId?: string | null }
             if (!resp.ok) return;
             const data = await resp.json();
             setStatuses(s => ({ ...s, [task_id]: data }));
-        } catch (e) {}
+        } catch {}
     }
 
     return (

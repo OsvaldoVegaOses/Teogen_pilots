@@ -2,12 +2,12 @@
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import InterviewUpload from "@/components/InterviewUpload";
 import MemoManager from "@/components/MemoManager";
 import CodeExplorer from "@/components/CodeExplorer";
 import TheoryViewer from "@/components/TheoryViewer";
+import type { Theory as TheoryViewerTheory } from "@/components/TheoryViewer";
 import InterviewModal from "@/components/InterviewModal";
 import ExportPanel, { enqueueLocalExport } from "@/components/ExportPanel";
 
@@ -29,6 +29,79 @@ type DashboardUiStateSnapshot = {
 };
 type ResetUiAction = "active_theory" | "dashboard_ui" | "all";
 
+type SegmentPreset = {
+    label: string;
+    domainTemplate: DomainTemplate;
+    suggestedName: string;
+    suggestedDescription: string;
+};
+
+type CreateProjectFormState = {
+    name: string;
+    domainTemplate: DomainTemplate;
+    description: string;
+};
+
+type ProjectSummary = {
+    id: string;
+    name?: string;
+    description?: string;
+    domain_template?: string;
+    saturation_score?: number;
+    [key: string]: unknown;
+};
+
+type InterviewSummary = {
+    id: string;
+    participant_pseudonym?: string;
+    transcription_method?: string;
+    word_count?: number;
+    language?: string;
+    status?: string;
+    [key: string]: unknown;
+};
+
+type TheorySummary = TheoryViewerTheory & { status?: string };
+
+const SEGMENT_PRESETS: Record<string, SegmentPreset> = {
+    educacion: {
+        label: "Educación",
+        domainTemplate: "education",
+        suggestedName: "Piloto Educación",
+        suggestedDescription: "Proyecto enfocado en experiencia educativa y engagement con apoderados.",
+    },
+    ong: {
+        label: "ONG",
+        domainTemplate: "ngo",
+        suggestedName: "Piloto ONG",
+        suggestedDescription: "Proyecto para entender necesidades comunitarias y evidenciar impacto para donantes.",
+    },
+    "market-research": {
+        label: "Estudio de Mercado",
+        domainTemplate: "market_research",
+        suggestedName: "Piloto Estudio de Mercado",
+        suggestedDescription: "Proyecto para acelerar análisis cualitativo y mejorar margen operativo.",
+    },
+    b2c: {
+        label: "B2C",
+        domainTemplate: "generic",
+        suggestedName: "Piloto B2C",
+        suggestedDescription: "Proyecto para mejorar servicio al cliente y fortalecer retención.",
+    },
+    consultoria: {
+        label: "Consultoría",
+        domainTemplate: "generic",
+        suggestedName: "Piloto Consultoría",
+        suggestedDescription: "Proyecto para diferenciar entregables y acelerar tiempos de entrega.",
+    },
+    "sector-publico": {
+        label: "Sector Público",
+        domainTemplate: "government",
+        suggestedName: "Piloto Sector Público",
+        suggestedDescription: "Proyecto para participación ciudadana y transparencia institucional.",
+    },
+};
+
 function isSameExpandedState(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
     const aKeys = Object.keys(a || {});
     const bKeys = Object.keys(b || {});
@@ -48,9 +121,12 @@ function isDashboardTab(value: string): value is DashboardTab {
 }
 
 export default function Dashboard() {
-    const { instance, accounts, inProgress } = useMsal();
+    const { inProgress } = useMsal();
     const isAuthenticated = useIsAuthenticated();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const segmentKey = (searchParams.get("segment") || "").toLowerCase();
+    const segmentPreset = SEGMENT_PRESETS[segmentKey] || null;
 
     useEffect(() => {
         // Only redirect if MSAL is done processing and user is not authenticated
@@ -60,18 +136,17 @@ export default function Dashboard() {
         }
     }, [inProgress, isAuthenticated, router]);
 
-    const [projects, setProjects] = useState<any[]>([]);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
     // Interviews tab state
-    const [interviews, setInterviews] = useState<any[]>([]);
+    const [interviews, setInterviews] = useState<InterviewSummary[]>([]);
     const [loadingInterviews, setLoadingInterviews] = useState(false);
     const [openInterviewId, setOpenInterviewId] = useState<string | null>(null);
 
-    const [activeTheory, setActiveTheory] = useState<any | null>(null);
-    const [loadingTheory, setLoadingTheory] = useState(false);
+    const [activeTheory, setActiveTheory] = useState<TheorySummary | null>(null);
     const [generatingTheory, setGeneratingTheory] = useState(false);
     const [theoryMessage, setTheoryMessage] = useState("");
     const [taskProgress, setTaskProgress] = useState<number | null>(null);
@@ -79,6 +154,22 @@ export default function Dashboard() {
     const [theoryDone, setTheoryDone] = useState(false);
     const [theoryFailed, setTheoryFailed] = useState(false);
     const [showResetUiModal, setShowResetUiModal] = useState(false);
+    const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+    const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+    const [creatingProject, setCreatingProject] = useState(false);
+    const [createProjectError, setCreateProjectError] = useState<string | null>(null);
+    const [editingProject, setEditingProject] = useState(false);
+    const [editProjectError, setEditProjectError] = useState<string | null>(null);
+    const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>({
+        name: "",
+        domainTemplate: "generic",
+        description: "Proyecto de investigación",
+    });
+    const [editProjectForm, setEditProjectForm] = useState<CreateProjectFormState>({
+        name: "",
+        domainTemplate: "generic",
+        description: "",
+    });
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
     const [logLines, setLogLines] = useState<string[]>([]);
     const [theoryViewerStateByTheory, setTheoryViewerStateByTheory] = useState<Record<string, TheoryViewerStateSnapshot>>({});
@@ -231,21 +322,18 @@ export default function Dashboard() {
                 return;
             }
 
-            setLoadingTheory(true);
             try {
                 const { apiClient } = await import("@/lib/api");
                 const response = await apiClient(`/projects/${selectedProjectId}/theories`);
 
                 if (response.ok) {
-                    const theories = await response.json();
+                    const theories = (await response.json()) as TheorySummary[];
                     // Assuming we want the latest completed theory
-                    const latest = theories.find((t: any) => t.status === "completed" || t.status === "draft");
+                    const latest = theories.find((t) => t.status === "completed" || t.status === "draft");
                     setActiveTheory(latest || null);
                 }
             } catch (error) {
                 console.error("Error fetching theory:", error);
-            } finally {
-                setLoadingTheory(false);
             }
         }
 
@@ -304,29 +392,35 @@ export default function Dashboard() {
         }
     }
 
-    async function handleCreateProject() {
-        const name = prompt("Nombre del nuevo proyecto:");
-        if (!name) return;
-        const templateInput = prompt(
-            "Plantilla de dominio (generic, education, ngo, government, market_research):",
-            "generic"
-        );
-        if (templateInput === null) return;
-        const domainTemplate = templateInput.trim().toLowerCase() || "generic";
-        if (!isDomainTemplate(domainTemplate)) {
-            alert("Plantilla no válida. Usa: generic, education, ngo, government, market_research.");
+    function openCreateProjectModal(preset?: SegmentPreset | null) {
+        const selectedPreset = preset || segmentPreset;
+        setCreateProjectError(null);
+        setCreateProjectForm({
+            name: selectedPreset?.suggestedName || "",
+            domainTemplate: selectedPreset?.domainTemplate || "generic",
+            description: selectedPreset?.suggestedDescription || "Proyecto de investigación",
+        });
+        setShowCreateProjectModal(true);
+    }
+
+    async function handleCreateProjectSubmit() {
+        const name = createProjectForm.name.trim();
+        if (!name) {
+            setCreateProjectError("El nombre del proyecto es obligatorio.");
             return;
         }
 
         try {
+            setCreatingProject(true);
+            setCreateProjectError(null);
             const { apiClient } = await import("@/lib/api");
             const response = await apiClient("/projects/", {
                 method: "POST",
                 body: JSON.stringify({
                     name,
-                    description: "Proyecto de investigación",
+                    description: createProjectForm.description.trim() || "Proyecto de investigación",
                     methodological_profile: "constructivist",
-                    domain_template: domainTemplate,
+                    domain_template: createProjectForm.domainTemplate,
                     language: "es"
                 })
             });
@@ -335,63 +429,65 @@ export default function Dashboard() {
                 const newProj = await response.json();
                 setProjects(prev => [newProj, ...prev]);
                 setSelectedProjectId(newProj.id);
+                setShowCreateProjectModal(false);
             } else {
                 const errData = await response.json().catch(() => ({}));
-                alert(`Error al crear proyecto: ${errData.detail || response.statusText}`);
+                setCreateProjectError(errData.detail || response.statusText || "No se pudo crear el proyecto.");
             }
         } catch (error) {
             console.error("Creation error:", error);
-            alert("Error de conexión al crear proyecto");
+            setCreateProjectError("Error de conexión al crear proyecto.");
+        } finally {
+            setCreatingProject(false);
         }
     }
 
-    async function handleEditProject() {
-        if (!selectedProjectId || !selectedProject) return;
+    function openEditProjectModal() {
+        if (!selectedProject) return;
+        const selectedDomainTemplate = selectedProject.domain_template || "";
+        setEditProjectError(null);
+        setEditProjectForm({
+            name: selectedProject.name || "",
+            domainTemplate: isDomainTemplate(selectedDomainTemplate)
+                ? selectedDomainTemplate
+                : "generic",
+            description: selectedProject.description || "",
+        });
+        setShowEditProjectModal(true);
+    }
 
-        const nameInput = prompt("Nuevo nombre del proyecto:", selectedProject.name || "");
-        if (nameInput === null) return;
-        const name = nameInput.trim();
+    async function handleEditProjectSubmit() {
+        if (!selectedProjectId) return;
+        const name = editProjectForm.name.trim();
         if (!name) {
-            alert("El nombre no puede estar vacio.");
+            setEditProjectError("El nombre del proyecto es obligatorio.");
             return;
         }
-
-        const templateInput = prompt(
-            "Plantilla de dominio (generic, education, ngo, government, market_research):",
-            selectedProject.domain_template || "generic"
-        );
-        if (templateInput === null) return;
-        const domainTemplate = templateInput.trim().toLowerCase() || "generic";
-        if (!isDomainTemplate(domainTemplate)) {
-            alert("Plantilla no valida. Usa: generic, education, ngo, government, market_research.");
-            return;
-        }
-
-        const descriptionInput = prompt("Descripcion del proyecto:", selectedProject.description || "");
-        if (descriptionInput === null) return;
-
         try {
+            setEditingProject(true);
+            setEditProjectError(null);
             const { apiClient } = await import("@/lib/api");
             const response = await apiClient(`/projects/${selectedProjectId}`, {
                 method: "PATCH",
                 body: JSON.stringify({
                     name,
-                    description: descriptionInput,
-                    domain_template: domainTemplate,
+                    description: editProjectForm.description.trim(),
+                    domain_template: editProjectForm.domainTemplate,
                 }),
             });
-
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
-                alert(`Error al actualizar proyecto: ${errData.detail || response.statusText}`);
+                setEditProjectError(errData.detail || response.statusText || "No se pudo actualizar el proyecto.");
                 return;
             }
-
             const updatedProject = await response.json();
             setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+            setShowEditProjectModal(false);
         } catch (error) {
             console.error("Project update error:", error);
-            alert("Error de conexion al actualizar proyecto");
+            setEditProjectError("Error de conexión al actualizar proyecto.");
+        } finally {
+            setEditingProject(false);
         }
     }
 
@@ -596,43 +692,61 @@ export default function Dashboard() {
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col min-w-0">
-                <header className="flex items-center justify-between p-8 border-b border-zinc-100 bg-white/50 backdrop-blur-sm dark:bg-zinc-950/50 dark:border-zinc-800">
-                    <div>
-                        <h1 className="text-2xl font-bold dark:text-white">
-                            {activeTab === "overview" && "Panel de Control"}
-                            {activeTab === "codes" && "Exploración de Conceptos"}
-                            {activeTab === "interviews" && "Entrevistas"}
-                            {activeTab === "memos" && "Memos Analíticos"}
-                        </h1>
-                    </div>
-                    <div className="flex gap-4">
+                <header className="border-b border-zinc-100 bg-white/50 p-8 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold dark:text-white">
+                                {activeTab === "overview" && "Panel de Control"}
+                                {activeTab === "codes" && "Exploración de Conceptos"}
+                                {activeTab === "interviews" && "Entrevistas"}
+                                {activeTab === "memos" && "Memos Analíticos"}
+                            </h1>
+                        </div>
+                        <div className="flex gap-4">
+                            <button
+                                onClick={handleSync}
+                                className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
+                            >
+                                Sincronizar Cloud
+                            </button>
                         <button
-                            onClick={handleSync}
-                            className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
-                        >
-                            Sincronizar Cloud
-                        </button>
-                        <button
-                            onClick={handleEditProject}
+                            onClick={openEditProjectModal}
                             disabled={!selectedProjectId}
                             className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed dark:border-zinc-800 dark:text-white"
                         >
-                            Editar Proyecto
-                        </button>
-                        <button
-                            onClick={handleCreateProject}
-                            className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
-                        >
-                            + Nuevo Proyecto
-                        </button>
-                        <button
-                            onClick={() => setShowResetUiModal(true)}
-                            className="rounded-2xl border border-amber-300 px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-all"
-                            title="Limpiar estado persistido de la UI"
-                        >
-                            Reset UI
-                        </button>
+                                Editar Proyecto
+                            </button>
+                            <button
+                                onClick={() => openCreateProjectModal()}
+                                className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
+                            >
+                                + Nuevo Proyecto
+                            </button>
+                            <button
+                                onClick={() => setShowResetUiModal(true)}
+                                className="rounded-2xl border border-amber-300 px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-all"
+                                title="Limpiar estado persistido de la UI"
+                            >
+                                Reset UI
+                            </button>
+                        </div>
                     </div>
+                    {segmentPreset && (
+                        <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 dark:border-indigo-900/60 dark:bg-indigo-950/40">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm text-indigo-800 dark:text-indigo-300">
+                                    Contexto aplicado: <span className="font-semibold">{segmentPreset.label}</span>.
+                                    Puedes iniciar un proyecto con plantilla y descripción sugeridas.
+                                </p>
+                                <button
+                                    onClick={() => openCreateProjectModal(segmentPreset)}
+                                    className="rounded-xl border border-indigo-300 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200 dark:hover:bg-indigo-900/60"
+                                >
+                                    Crear proyecto sugerido
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </header>
 
                 <div className="flex-1 p-8 overflow-y-auto">
@@ -645,7 +759,7 @@ export default function Dashboard() {
                                     <div className="col-span-2 p-10 text-center border-2 border-dashed rounded-3xl border-zinc-200">
                                         <p className="text-zinc-400 mb-4">No tienes proyectos activos.</p>
                                         <button
-                                            onClick={handleCreateProject}
+                                            onClick={() => openCreateProjectModal(segmentPreset)}
                                             className="text-indigo-600 font-bold hover:underline"
                                         >
                                             Crear tu primer proyecto de investigación
@@ -769,12 +883,12 @@ export default function Dashboard() {
                                                             <span>{taskStep || "iniciando"}</span>
                                                             <span>{taskProgress ?? 0}%</span>
                                                         </div>
-                                                        <div className="h-2 w-full rounded-full bg-white/20 overflow-hidden">
-                                                            <div
-                                                                className="h-full rounded-full bg-white transition-all duration-700 ease-out"
-                                                                style={{ width: `${taskProgress ?? 0}%` }}
-                                                            />
-                                                        </div>
+                                                        <progress
+                                                            className="h-2 w-full overflow-hidden rounded-full"
+                                                            max={100}
+                                                            value={taskProgress ?? 0}
+                                                            aria-label="Progreso de generación de teoría"
+                                                        />
                                                     </div>
                                                     {currentTaskId && (
                                                         <p className="text-xs text-white/40 font-mono truncate">
@@ -938,6 +1052,148 @@ export default function Dashboard() {
                     projectId={selectedProjectId}
                     onClose={() => setOpenInterviewId(null)}
                 />
+            )}
+
+            {showCreateProjectModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                        <h3 className="text-lg font-bold dark:text-white">Crear nuevo proyecto</h3>
+                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                            Configura el proyecto inicial para comenzar tu prueba gratuita.
+                        </p>
+                        <div className="mt-5 space-y-4">
+                            <div>
+                                <label htmlFor="create-project-name" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Nombre</label>
+                                <input
+                                    id="create-project-name"
+                                    value={createProjectForm.name}
+                                    onChange={(event) => setCreateProjectForm((prev) => ({ ...prev, name: event.target.value }))}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                    placeholder="Ej: Piloto ONG"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="create-project-domain-template" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Plantilla de dominio</label>
+                                <select
+                                    id="create-project-domain-template"
+                                    value={createProjectForm.domainTemplate}
+                                    onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        if (!isDomainTemplate(nextValue)) return;
+                                        setCreateProjectForm((prev) => ({ ...prev, domainTemplate: nextValue }));
+                                    }}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                >
+                                    <option value="generic">generic</option>
+                                    <option value="education">education</option>
+                                    <option value="ngo">ngo</option>
+                                    <option value="government">government</option>
+                                    <option value="market_research">market_research</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="create-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Descripción</label>
+                                <textarea
+                                    id="create-project-description"
+                                    value={createProjectForm.description}
+                                    onChange={(event) => setCreateProjectForm((prev) => ({ ...prev, description: event.target.value }))}
+                                    className="min-h-24 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                    placeholder="Describe brevemente el objetivo del proyecto."
+                                />
+                            </div>
+                            {createProjectError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                    {createProjectError}
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowCreateProjectModal(false)}
+                                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreateProjectSubmit}
+                                disabled={creatingProject}
+                                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                            >
+                                {creatingProject ? "Creando..." : "Crear proyecto"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showEditProjectModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                        <h3 className="text-lg font-bold dark:text-white">Editar proyecto</h3>
+                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                            Actualiza nombre, plantilla y descripción del proyecto.
+                        </p>
+                        <div className="mt-5 space-y-4">
+                            <div>
+                                <label htmlFor="edit-project-name" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Nombre</label>
+                                <input
+                                    id="edit-project-name"
+                                    value={editProjectForm.name}
+                                    onChange={(event) => setEditProjectForm((prev) => ({ ...prev, name: event.target.value }))}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="edit-project-domain-template" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Plantilla de dominio</label>
+                                <select
+                                    id="edit-project-domain-template"
+                                    value={editProjectForm.domainTemplate}
+                                    onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        if (!isDomainTemplate(nextValue)) return;
+                                        setEditProjectForm((prev) => ({ ...prev, domainTemplate: nextValue }));
+                                    }}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                >
+                                    <option value="generic">generic</option>
+                                    <option value="education">education</option>
+                                    <option value="ngo">ngo</option>
+                                    <option value="government">government</option>
+                                    <option value="market_research">market_research</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="edit-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Descripción</label>
+                                <textarea
+                                    id="edit-project-description"
+                                    value={editProjectForm.description}
+                                    onChange={(event) => setEditProjectForm((prev) => ({ ...prev, description: event.target.value }))}
+                                    className="min-h-24 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                />
+                            </div>
+                            {editProjectError && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                    {editProjectError}
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowEditProjectModal(false)}
+                                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleEditProjectSubmit}
+                                disabled={editingProject}
+                                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                            >
+                                {editingProject ? "Guardando..." : "Guardar cambios"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showResetUiModal && (

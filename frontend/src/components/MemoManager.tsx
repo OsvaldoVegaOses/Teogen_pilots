@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api";
 
 interface Memo {
@@ -19,11 +19,7 @@ export default function MemoManager({ projectId }: { projectId: string }) {
     const [errorMessage, setErrorMessage] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
 
-    useEffect(() => {
-        if (projectId) fetchMemos();
-    }, [projectId]);
-
-    const fetchMemos = async () => {
+    const fetchMemos = useCallback(async () => {
         try {
             const res = await apiClient(`memos/project/${projectId}`);
             if (res.ok) {
@@ -34,7 +30,11 @@ export default function MemoManager({ projectId }: { projectId: string }) {
                 setErrorMessage(err.detail || "No se pudieron cargar los memos.");
             }
         } catch (e) { console.error("Error fetching memos:", e); }
-    };
+    }, [projectId]);
+
+    useEffect(() => {
+        if (projectId) fetchMemos();
+    }, [projectId, fetchMemos]);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();

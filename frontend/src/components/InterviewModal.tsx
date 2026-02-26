@@ -3,15 +3,21 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 
+type TranscriptSegment = {
+    fragment_id: string;
+    speaker_id?: string;
+    start_ms?: number;
+    text?: string;
+};
+
 export default function InterviewModal({ interviewId, projectId, onClose, seekMs, highlightFragment }: { interviewId: string | null, projectId?: string | null, onClose: () => void, seekMs?: number | null, highlightFragment?: string | null }) {
     const [loading, setLoading] = useState(false);
-    const [segments, setSegments] = useState<any[]>([]);
+    const [segments, setSegments] = useState<TranscriptSegment[]>([]);
     const [page, setPage] = useState(1);
     const [hasNext, setHasNext] = useState(false);
     const [message, setMessage] = useState("");
     const [includeFull, setIncludeFull] = useState(false);
     const [query, setQuery] = useState("");
-    const audioRef = useState<HTMLAudioElement | null>(null)[0] as any;
 
     useEffect(() => {
         if (!interviewId) return;
@@ -159,7 +165,7 @@ export default function InterviewModal({ interviewId, projectId, onClose, seekMs
                         <button disabled={!hasNext} onClick={() => setPage(p => p+1)} className="px-3 py-1 rounded-xl border">Siguiente</button>
                     </div>
                     <div>
-                        <audio data-interview-id={interviewId} ref={(el) => { if (el) (audioRef as any) = el; }} controls className="max-w-sm" />
+                        <audio data-interview-id={interviewId} controls className="max-w-sm" />
                     </div>
                 </div>
             </div>

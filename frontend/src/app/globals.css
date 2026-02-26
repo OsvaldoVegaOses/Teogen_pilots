@@ -105,11 +105,136 @@ body {
   pointer-events: none;
 }
 
+@keyframes nodeBreath {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes linkFlow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes checkReveal {
+  0% {
+    stroke-dasharray: 0 40;
+    opacity: 0.4;
+  }
+  50% {
+    stroke-dasharray: 30 10;
+    opacity: 1;
+  }
+  100% {
+    stroke-dasharray: 30 10;
+    opacity: 0.85;
+  }
+}
+
+@keyframes lensScan {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.45;
+    transform: translateX(1.5px);
+  }
+}
+
+.trace-node,
+.network-node {
+  transform-origin: center;
+  animation: nodeBreath 3.2s ease-in-out infinite;
+}
+
+.trace-link {
+  animation: linkFlow 3.6s ease-in-out infinite;
+}
+
+.insight-arrow {
+  animation: linkFlow 2.8s ease-in-out infinite;
+}
+
+.risk-check {
+  animation: checkReveal 2.6s ease-in-out infinite;
+}
+
+.doc-lens {
+  animation: lensScan 2.8s ease-in-out infinite;
+}
+
+.insight-card {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+
+.insight-card-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes cardGlowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0);
+  }
+  50% {
+    box-shadow: 0 0 0.75rem rgba(99, 102, 241, 0.12);
+  }
+}
+
+@keyframes audienceDotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+.workflow-card {
+  animation: cardGlowPulse 5.2s ease-in-out infinite;
+}
+
+.audience-card > div > div:first-child {
+  animation: audienceDotPulse 2.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ambient-line,
   .ambient-glow,
   .status-dot-pulse,
-  .status-sweep::after {
+  .status-sweep::after,
+  .trace-node,
+  .network-node,
+  .trace-link,
+  .insight-arrow,
+  .risk-check,
+  .doc-lens,
+  .insight-card,
+  .insight-card-visible {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .audience-card > div > div:first-child {
     animation: none !important;
   }
 }

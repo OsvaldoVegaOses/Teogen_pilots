@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "@/components/InterviewModal";
 
-interface Theory {
+export interface Theory {
     id: string;
     version: number;
     generated_by: string;
     confidence_score: number;
-    model_json: Record<string, any>;
-    propositions: any[];
-    gaps: any[];
-    validation?: Record<string, any>;
+    model_json: Record<string, unknown>;
+    propositions: unknown[];
+    gaps: unknown[];
+    validation?: Record<string, unknown>;
 }
 
 interface TheoryViewerProps {
@@ -63,6 +63,14 @@ interface ClaimExplainResponse {
 }
 
 const CLAIMS_PAGE_SIZE = 10;
+type LooseRecord = Record<string, unknown>;
+
+function getEvidenceIds(value: unknown): string[] {
+    if (!value || typeof value !== "object") return [];
+    const evidenceIds = (value as LooseRecord).evidence_ids;
+    if (!Array.isArray(evidenceIds)) return [];
+    return evidenceIds.map((id) => String(id));
+}
 
 function isSameExpandedState(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
     const aKeys = Object.keys(a);
@@ -92,8 +100,9 @@ export default function TheoryViewer({
     const [claimsSectionFilter, setClaimsSectionFilter] = useState<string>(viewerState?.sectionFilter || "all");
     const [claimsTypeFilter, setClaimsTypeFilter] = useState<string>(viewerState?.claimTypeFilter || "all");
     const [claimsPage, setClaimsPage] = useState(viewerState?.page || 0);
+    const modelJson = (theory?.model_json || {}) as LooseRecord;
 
-    const toDisplayText = (value: any): string => {
+    const toDisplayText = (value: unknown): string => {
         if (value == null) return "";
         if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
             return String(value);
@@ -102,31 +111,35 @@ export default function TheoryViewer({
             return value.map((v) => toDisplayText(v)).filter(Boolean).join(" | ");
         }
         if (typeof value === "object") {
+            const v = value as LooseRecord;
             // Prefer explicit textual fields when present
-            if (typeof value.text === "string" && value.text.trim()) return String(value.text).trim();
-            if (value.name && (value.type || value.horizon)) {
-                const tags = [value.type, value.horizon].filter(Boolean).join("/");
-                return tags ? `${String(value.name)} [${tags}]` : String(value.name);
+            if (typeof v.text === "string" && v.text.trim()) return String(v.text).trim();
+            if (v.name && (v.type || v.horizon)) {
+                const tags = [v.type, v.horizon].filter(Boolean).join("/");
+                return tags ? `${String(v.name)} [${tags}]` : String(v.name);
             }
-            if (value.name && value.evidence) return `${value.name}: ${toDisplayText(value.evidence)}`;
-            if (value.gap_description) return toDisplayText(value.gap_description);
-            if (value.theoretical_model_description) return toDisplayText(value.theoretical_model_description);
-            if (value.selected_central_category) return toDisplayText(value.selected_central_category);
-            if (value.central_phenomenon?.name) return toDisplayText(value.central_phenomenon.name);
-            if (value.definition) return `${toDisplayText(value.name || "")}${value.name ? ": " : ""}${toDisplayText(value.definition)}`;
-            if (value.evidence) return toDisplayText(value.evidence);
-            if (value.description) return toDisplayText(value.description);
-            if (value.id && value.name) return `${toDisplayText(value.name)} (${toDisplayText(value.id)})`;
+            if (v.name && v.evidence) return `${v.name}: ${toDisplayText(v.evidence)}`;
+            if (v.gap_description) return toDisplayText(v.gap_description);
+            if (v.theoretical_model_description) return toDisplayText(v.theoretical_model_description);
+            if (v.selected_central_category) return toDisplayText(v.selected_central_category);
+            if (v.central_phenomenon && typeof v.central_phenomenon === "object") {
+                const centralPhenomenon = v.central_phenomenon as LooseRecord;
+                if (centralPhenomenon.name) return toDisplayText(centralPhenomenon.name);
+            }
+            if (v.definition) return `${toDisplayText(v.name || "")}${v.name ? ": " : ""}${toDisplayText(v.definition)}`;
+            if (v.evidence) return toDisplayText(v.evidence);
+            if (v.description) return toDisplayText(v.description);
+            if (v.id && v.name) return `${toDisplayText(v.name)} (${toDisplayText(v.id)})`;
             try {
                 return JSON.stringify(value);
-            } catch (_) {
+            } catch {
                 return String(value);
             }
         }
         return String(value);
     };
 
-    const asItems = (value: any): any[] => {
+    const asItems = (value: unknown): unknown[] => {
         if (value == null) return [];
         if (Array.isArray(value)) return value;
         return [value];
@@ -179,7 +192,7 @@ export default function TheoryViewer({
                 if (!ignore) {
                     setClaimsData(data);
                 }
-            } catch (error) {
+            } catch {
                 if (!ignore) {
                     setClaimsError("No se pudo cargar la evidencia por claim.");
                     setClaimsData(null);
@@ -194,22 +207,24 @@ export default function TheoryViewer({
         };
     }, [projectId, theory?.id, claimsPage, claimsSectionFilter, claimsTypeFilter]);
 
-    const networkSummary = theory?.validation?.network_metrics_summary || {};
-    const counts = networkSummary?.counts || {};
-    const centrality = asItems(networkSummary?.category_centrality_top);
-    const cooccurrence = asItems(networkSummary?.category_cooccurrence_top);
-    const semanticEvidence = asItems(networkSummary?.semantic_evidence_top);
+    const validation = (theory?.validation || {}) as LooseRecord;
+    const networkSummary = (validation.network_metrics_summary || {}) as LooseRecord;
+    const counts = (networkSummary.counts || {}) as LooseRecord;
+    const centrality = asItems(networkSummary.category_centrality_top);
+    const cooccurrence = asItems(networkSummary.category_cooccurrence_top);
+    const semanticEvidence = asItems(networkSummary.semantic_evidence_top);
+    const pipelineRuntime = (validation.pipeline_runtime || {}) as LooseRecord;
     const promptVersion =
-        theory?.validation?.pipeline_runtime?.prompt_version ||
-        theory?.validation?.pipeline_runtime?.promptVersion ||
-        theory?.validation?.pipeline_runtime?.prompt ||
+        pipelineRuntime.prompt_version ||
+        pipelineRuntime.promptVersion ||
+        pipelineRuntime.prompt ||
         "";
 
     const evidenceCoverage = (() => {
         const props = asItems(theory?.propositions);
-        const cons = asItems(theory?.model_json?.consequences);
-        const propsWithEvidence = props.filter((p) => Array.isArray(p?.evidence_ids) && p.evidence_ids.length > 0).length;
-        const consWithEvidence = cons.filter((c) => Array.isArray(c?.evidence_ids) && c.evidence_ids.length > 0).length;
+        const cons = asItems(modelJson.consequences);
+        const propsWithEvidence = props.filter((p) => getEvidenceIds(p).length > 0).length;
+        const consWithEvidence = cons.filter((c) => getEvidenceIds(c).length > 0).length;
         return {
             propsTotal: props.length,
             propsWithEvidence,
@@ -238,22 +253,22 @@ export default function TheoryViewer({
     };
 
     const centralCategory =
-        toDisplayText(theory?.model_json?.selected_central_category) ||
-        toDisplayText(theory?.model_json?.central_phenomenon?.name) ||
+        toDisplayText(modelJson.selected_central_category) ||
+        toDisplayText((modelJson.central_phenomenon as LooseRecord | undefined)?.name) ||
         "No disponible";
 
     const conditionsText =
-        toDisplayText(theory?.model_json?.conditions) ||
-        toDisplayText(theory?.model_json?.causal_conditions) ||
+        toDisplayText(modelJson.conditions) ||
+        toDisplayText(modelJson.causal_conditions) ||
         "No disponible";
 
     const actionsText =
-        toDisplayText(theory?.model_json?.actions) ||
-        toDisplayText(theory?.model_json?.action_strategies) ||
+        toDisplayText(modelJson.actions) ||
+        toDisplayText(modelJson.action_strategies) ||
         "No disponible";
 
     const consequencesText =
-        toDisplayText(theory?.model_json?.consequences) ||
+        toDisplayText(modelJson.consequences) ||
         "No disponible";
 
     const handleExport = async (format: "pdf" | "pptx" | "xlsx" | "png") => {
@@ -352,9 +367,9 @@ export default function TheoryViewer({
                     <div className="grid gap-4 text-sm">
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Condiciones</span>
-                            {asItems(theory?.model_json?.conditions || theory?.model_json?.causal_conditions).length > 0 ? (
+                            {asItems(modelJson.conditions || modelJson.causal_conditions).length > 0 ? (
                                 <ul className={`space-y-2 ${expanded.conditions ? "" : "max-h-40 overflow-auto"}`}>
-                                    {asItems(theory?.model_json?.conditions || theory?.model_json?.causal_conditions).map((it, i) => (
+                                    {asItems(modelJson.conditions || modelJson.causal_conditions).map((it, i) => (
                                         <li key={i} className="text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap">
                                             {toDisplayText(it)}
                                         </li>
@@ -369,9 +384,9 @@ export default function TheoryViewer({
                         </div>
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Acciones / Interacciones</span>
-                            {asItems(theory?.model_json?.actions || theory?.model_json?.action_strategies).length > 0 ? (
+                            {asItems(modelJson.actions || modelJson.action_strategies).length > 0 ? (
                                 <ul className={`space-y-2 ${expanded.actions ? "" : "max-h-40 overflow-auto"}`}>
-                                    {asItems(theory?.model_json?.actions || theory?.model_json?.action_strategies).map((it, i) => (
+                                    {asItems(modelJson.actions || modelJson.action_strategies).map((it, i) => (
                                         <li key={i} className="text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap">
                                             {toDisplayText(it)}
                                         </li>
@@ -386,15 +401,15 @@ export default function TheoryViewer({
                         </div>
                         <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
                             <span className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">Consecuencias</span>
-                            {asItems(theory?.model_json?.consequences).length > 0 ? (
+                            {asItems(modelJson.consequences).length > 0 ? (
                                 <ul className={`space-y-2 ${expanded.consequences ? "" : "max-h-40 overflow-auto"}`}>
-                                    {asItems(theory?.model_json?.consequences).map((it, i) => (
+                                    {asItems(modelJson.consequences).map((it, i) => (
                                         <li key={i} className="text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap">
                                             {toDisplayText(it)}
-                                            {Array.isArray((it as any)?.evidence_ids) && (it as any).evidence_ids.length > 0 && (
+                                            {getEvidenceIds(it).length > 0 && (
                                                 <div className="mt-1 text-[11px] text-zinc-500">
-                                                    evidence_ids: {(it as any).evidence_ids.slice(0, 5).join(", ")}
-                                                    {(it as any).evidence_ids.length > 5 ? " ..." : ""}
+                                                    evidence_ids: {getEvidenceIds(it).slice(0, 5).join(", ")}
+                                                    {getEvidenceIds(it).length > 5 ? " ..." : ""}
                                                 </div>
                                             )}
                                         </li>
@@ -422,10 +437,10 @@ export default function TheoryViewer({
                                     <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-sm break-words whitespace-pre-wrap">
                                         {toDisplayText(prop)}
                                     </p>
-                                    {Array.isArray((prop as any)?.evidence_ids) && (prop as any).evidence_ids.length > 0 && (
+                                    {getEvidenceIds(prop).length > 0 && (
                                         <div className="mt-1 text-[11px] text-zinc-500">
-                                            evidence_ids: {(prop as any).evidence_ids.slice(0, 5).join(", ")}
-                                            {(prop as any).evidence_ids.length > 5 ? " ..." : ""}
+                                            evidence_ids: {getEvidenceIds(prop).slice(0, 5).join(", ")}
+                                            {getEvidenceIds(prop).length > 5 ? " ..." : ""}
                                         </div>
                                     )}
                                 </div>
@@ -446,7 +461,7 @@ export default function TheoryViewer({
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Grafo (Neo4j)</div>
                                 <div className="text-zinc-600 dark:text-zinc-400">
-                                    Categorias: {counts.category_count ?? 0} · Codigos: {counts.code_count ?? 0} · Fragmentos: {counts.fragment_count ?? 0}
+                                    Categorias: {Number(counts.category_count ?? 0)} · Codigos: {Number(counts.code_count ?? 0)} · Fragmentos: {Number(counts.fragment_count ?? 0)}
                                 </div>
                                 {centrality.length > 0 && (
                                     <div className="mt-3 overflow-auto">
@@ -461,15 +476,17 @@ export default function TheoryViewer({
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {centrality.slice(0, 10).map((r: any, i: number) => (
+                                                {centrality.slice(0, 10).map((row, i: number) => {
+                                                    const r = row as LooseRecord;
+                                                    return (
                                                     <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
-                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{r.category_name || r.category_id}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{r.pagerank ?? ""}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{r.gds_degree ?? ""}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{r.code_degree ?? ""}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{r.fragment_degree ?? ""}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_name || r.category_id)}</td>
+                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.pagerank ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.gds_degree ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.code_degree ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.fragment_degree ?? "")}</td>
                                                     </tr>
-                                                ))}
+                                                )})}
                                             </tbody>
                                         </table>
                                     </div>
@@ -486,13 +503,15 @@ export default function TheoryViewer({
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {cooccurrence.slice(0, 10).map((r: any, i: number) => (
+                                                {cooccurrence.slice(0, 10).map((row, i: number) => {
+                                                    const r = row as LooseRecord;
+                                                    return (
                                                     <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
-                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{r.category_a_name || r.category_a_id}</td>
-                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{r.category_b_name || r.category_b_id}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{r.shared_fragments ?? ""}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_a_name || r.category_a_id)}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_b_name || r.category_b_id)}</td>
+                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.shared_fragments ?? "")}</td>
                                                     </tr>
-                                                ))}
+                                                )})}
                                             </tbody>
                                         </table>
                                     </div>
@@ -505,19 +524,23 @@ export default function TheoryViewer({
                                     <div className="text-zinc-500">Sin evidencia registrada en validacion.</div>
                                 ) : (
                                     <div className={`space-y-3 ${expanded.evidence ? "" : "max-h-72 overflow-auto"}`}>
-                                        {semanticEvidence.slice(0, expanded.evidence ? 50 : 15).map((bucket: any, i: number) => (
+                                        {semanticEvidence.slice(0, expanded.evidence ? 50 : 15).map((item, i: number) => {
+                                            const bucket = item as LooseRecord;
+                                            return (
                                             <div key={i} className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
                                                 <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                                                    {bucket.category_name || bucket.category_id}
+                                                    {toDisplayText(bucket.category_name || bucket.category_id)}
                                                 </div>
                                                 <div className="mt-1 space-y-2">
-                                                    {asItems(bucket.fragments).slice(0, 3).map((f: any, j: number) => (
+                                                    {asItems(bucket.fragments).slice(0, 3).map((fragment, j: number) => {
+                                                        const f = fragment as LooseRecord;
+                                                        return (
                                                         <div key={j} className="text-xs text-zinc-600 dark:text-zinc-400">
                                                             <div className="text-[11px] text-zinc-500">
-                                                                fragment_id: {f.fragment_id || f.id} · score: {f.score ?? ""}
+                                                                fragment_id: {toDisplayText(f.fragment_id || f.id)} · score: {toDisplayText(f.score ?? "")}
                                                             </div>
-                                                            <div className="whitespace-pre-wrap break-words">{f.text}</div>
-                                                            {(f.fragment_id || f.id) && (
+                                                            <div className="whitespace-pre-wrap break-words">{toDisplayText(f.text)}</div>
+                                                            {Boolean(f.fragment_id || f.id) && (
                                                                 <button
                                                                     onClick={() => openFragmentInTranscript(String(f.fragment_id || f.id))}
                                                                     className="mt-1 text-[11px] font-bold text-indigo-600"
@@ -526,10 +549,10 @@ export default function TheoryViewer({
                                                                 </button>
                                                             )}
                                                         </div>
-                                                    ))}
+                                                    )})}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                 )}
                                 <button onClick={() => toggle("evidence")} className="mt-2 text-xs font-bold text-indigo-600">
@@ -586,22 +609,25 @@ export default function TheoryViewer({
                                     <div className="text-sm text-amber-600">{claimsError}</div>
                                 ) : (
                                     <>
-                                        {asItems(claimsData?.claims).length === 0 ? (
+                                        {(claimsData?.claims || []).length === 0 ? (
                                             <div className="text-sm text-zinc-500">Sin claims para los filtros seleccionados.</div>
                                         ) : (
                                             <div className={`space-y-3 ${expanded.claimsExplain ? "" : "max-h-80 overflow-auto"}`}>
-                                                {asItems(claimsData?.claims).map((claim: ClaimExplainItem, idx: number) => (
+                                                {(claimsData?.claims || []).map((claim: ClaimExplainItem, idx: number) => (
                                                     <div key={`${claim.claim_id || idx}`} className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
                                                         <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 break-words">
                                                             [{claim.section}] {claim.text}
                                                         </div>
                                                         {asItems(claim.categories).length > 0 && (
                                                             <div className="mt-1 text-[11px] text-zinc-500 break-words">
-                                                                Categorias: {asItems(claim.categories).map((cat: any) => cat?.name || cat?.id).filter(Boolean).join(", ")}
+                                                                Categorias: {asItems(claim.categories).map((category) => {
+                                                                    const cat = category as LooseRecord;
+                                                                    return cat?.name || cat?.id;
+                                                                }).filter(Boolean).join(", ")}
                                                             </div>
                                                         )}
                                                         <div className="mt-1 space-y-1">
-                                                            {asItems(claim.evidence).slice(0, 5).map((ev: ClaimExplainEvidence, j: number) => (
+                                                            {claim.evidence.slice(0, 5).map((ev: ClaimExplainEvidence, j: number) => (
                                                                 <div key={`${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-600 dark:text-zinc-400">
                                                                     <div>
                                                                         fragment_id: {ev.fragment_id} · score: {ev.score ?? ""} · rank: {ev.rank ?? ""}

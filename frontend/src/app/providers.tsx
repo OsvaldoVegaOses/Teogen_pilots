@@ -10,7 +10,11 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
-    const [isInitialized, setIsInitialized] = useState(false);
+    const msalConfigured = Boolean(
+        process.env.NEXT_PUBLIC_AZURE_AD_CLIENT_ID &&
+        process.env.NEXT_PUBLIC_AZURE_AD_TENANT_ID
+    );
+    const [isInitialized, setIsInitialized] = useState(!msalConfigured);
     const initStarted = useRef(false);
     const isBrowser = typeof window !== "undefined";
     const currentPath = isBrowser ? window.location.pathname : "/";
@@ -19,16 +23,8 @@ export function Providers({ children }: ProvidersProps) {
         currentPath.startsWith("/login") ||
         currentPath.startsWith("/signup");
 
-    const msalConfigured = Boolean(
-        process.env.NEXT_PUBLIC_AZURE_AD_CLIENT_ID &&
-        process.env.NEXT_PUBLIC_AZURE_AD_TENANT_ID
-    );
-
     useEffect(() => {
-        // If MSAL env vars are missing, avoid crashing the whole app.
-        // Landing page can still render; auth area gets explicit message below.
         if (!msalConfigured) {
-            setIsInitialized(true);
             return;
         }
 
@@ -71,7 +67,7 @@ export function Providers({ children }: ProvidersProps) {
                 instance.removeEventCallback(callbackId);
             }
         };
-    }, []);
+    }, [msalConfigured]);
 
     if (!isInitialized) {
         return (

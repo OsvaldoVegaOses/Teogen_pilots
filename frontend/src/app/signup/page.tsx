@@ -3,19 +3,31 @@
 import { useMsal } from "@azure/msal-react";
 import { loginRequest } from "@/lib/msalConfig";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+
+const SEGMENT_LABELS: Record<string, string> = {
+  educacion: "Educación",
+  ong: "ONG",
+  "market-research": "Estudios de Mercado",
+  b2c: "Empresas B2C",
+  consultoria: "Consultoras",
+  "sector-publico": "Gobierno/Municipios",
+};
 
 export default function Signup() {
   const { instance, accounts } = useMsal();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const segmentKey = (searchParams.get("segment") || "").toLowerCase();
+  const segmentLabel = SEGMENT_LABELS[segmentKey] || null;
 
   useEffect(() => {
     if (accounts.length > 0) {
-      router.push("/dashboard");
+      router.push(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
     }
-  }, [accounts, router]);
+  }, [accounts, router, segmentKey]);
 
   const handleSignup = async () => {
     setIsLoading(true);
@@ -52,7 +64,12 @@ export default function Signup() {
         <div className="w-full max-w-md space-y-8 p-8 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight">Crear Cuenta</h2>
-            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Únete a TheoGen usando tu cuenta de Microsoft.</p>
+            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Prueba TheoGen gratis usando tu cuenta de Microsoft.</p>
+            {segmentLabel && (
+              <p className="mt-3 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-900/70 dark:bg-indigo-950/40 dark:text-indigo-300">
+                Segmento seleccionado: {segmentLabel}
+              </p>
+            )}
           </div>
 
           <div className="mt-8 space-y-6">
@@ -76,7 +93,7 @@ export default function Signup() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="bg-white dark:bg-zinc-900 px-2 text-zinc-500">
-                    ¿Ya tienes cuenta? <Link href="/login" className="text-indigo-600 hover:text-indigo-500 ml-1">Inicia sesión</Link>
+                    ¿Ya tienes cuenta? <Link href={segmentKey ? `/login?segment=${segmentKey}` : "/login"} className="text-indigo-600 hover:text-indigo-500 ml-1">Inicia sesión</Link>
                   </span>
                 </div>
               </div>

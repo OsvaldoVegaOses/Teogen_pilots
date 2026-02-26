@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "./InterviewModal";
 
+type EvidenceItem = {
+    link_id: string;
+    interview?: { id?: string; participant_pseudonym?: string };
+    fragment?: { id?: string; paragraph_index?: number; text?: string };
+};
+
 export default function CodeEvidenceModal({ codeId, projectId, onClose }: { codeId: string | null, projectId?: string | null, onClose: () => void }) {
     const [loading, setLoading] = useState(false);
-    const [items, setItems] = useState<any[]>([]);
+    const [items, setItems] = useState<EvidenceItem[]>([]);
     const [page, setPage] = useState(1);
     const [hasNext, setHasNext] = useState(false);
     const [openInterview, setOpenInterview] = useState<string | null>(null);
@@ -59,10 +65,10 @@ export default function CodeEvidenceModal({ codeId, projectId, onClose }: { code
                                 </div>
                                 <div className="flex flex-col gap-2 ml-4">
                                     <div className="flex flex-col gap-2">
-                                        <button onClick={() => setOpenInterview(it.interview?.id)} className="rounded-xl border px-3 py-1 text-sm">Ver entrevista</button>
+                                        <button onClick={() => setOpenInterview(it.interview?.id || null)} className="rounded-xl border px-3 py-1 text-sm">Ver entrevista</button>
                                         <button onClick={() => {
                                             // scroll to fragment in interview modal via props
-                                            setOpenInterview(it.interview?.id);
+                                            setOpenInterview(it.interview?.id || null);
                                             setTimeout(() => {
                                                 const el = document.querySelector(`[data-fragment-id="${it.fragment?.id}"]`);
                                                 if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });

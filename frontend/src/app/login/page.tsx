@@ -3,37 +3,44 @@
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "@/lib/msalConfig";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+
+const SEGMENT_LABELS: Record<string, string> = {
+  educacion: "Educación",
+  ong: "ONG",
+  "market-research": "Estudios de Mercado",
+  b2c: "Empresas B2C",
+  consultoria: "Consultoras",
+  "sector-publico": "Gobierno/Municipios",
+};
 
 export default function Login() {
   const { instance, accounts, inProgress } = useMsal();
   const isAuthenticated = useIsAuthenticated();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const segmentKey = (searchParams.get("segment") || "").toLowerCase();
+  const segmentLabel = SEGMENT_LABELS[segmentKey] || null;
+  const isProcessingRedirect = inProgress !== "none";
 
   // Handle the redirect response from Microsoft
   useEffect(() => {
     console.log("[Login] Component mounted. inProgress:", inProgress, "accounts:", accounts.length, "isAuthenticated:", isAuthenticated);
 
-    // If MSAL is still processing (handleRedirectPromise in progress), wait
-    if (inProgress !== "none") {
+    if (isProcessingRedirect) {
       console.log("[Login] MSAL interaction in progress:", inProgress);
-      setIsProcessingRedirect(true);
       return;
     }
-
-    // MSAL is done processing
-    setIsProcessingRedirect(false);
 
     // If the user is authenticated, redirect to dashboard
     if (isAuthenticated && accounts.length > 0) {
       console.log("[Login] User is authenticated, redirecting to /dashboard. Account:", accounts[0]?.username);
-      router.replace("/dashboard/");
+      router.replace(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
     }
-  }, [inProgress, isAuthenticated, accounts, router]);
+  }, [inProgress, isAuthenticated, accounts, router, segmentKey, isProcessingRedirect]);
 
   const handleLogin = async () => {
     setIsLoading(true);
@@ -89,7 +96,12 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8 p-8 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight">Bienvenido</h2>
-            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Inicia sesión con tu cuenta corporativa o de Microsoft para acceder a TheoGen.</p>
+            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Inicia sesión para continuar tu prueba gratuita de TheoGen.</p>
+            {segmentLabel && (
+              <p className="mt-3 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-900/70 dark:bg-indigo-950/40 dark:text-indigo-300">
+                Segmento seleccionado: {segmentLabel}
+              </p>
+            )}
           </div>
 
           {authError && (
@@ -125,6 +137,12 @@ export default function Login() {
               </div>
 
               <div className="mt-6 text-center text-xs text-zinc-500">
+                <p className="mb-2">
+                  ¿Aún no tienes cuenta?{" "}
+                  <Link href={segmentKey ? `/signup?segment=${segmentKey}` : "/signup"} className="underline hover:text-indigo-500">
+                    Crear cuenta
+                  </Link>
+                </p>
                 <p>Al continuar, aceptas nuestros <Link href="/#" className="underline hover:text-indigo-500">Términos de Servicio</Link> y <Link href="/#" className="underline hover:text-indigo-500">Política de Privacidad</Link>.</p>
               </div>
             </div>

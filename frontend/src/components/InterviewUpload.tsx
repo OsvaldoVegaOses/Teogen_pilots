@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "./InterviewModal";
 import ExportPanel, { enqueueLocalExport } from "./ExportPanel";
@@ -10,10 +10,15 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
     const [pseudonym, setPseudonym] = useState("");
     const [uploading, setUploading] = useState(false);
     const [message, setMessage] = useState("");
-    const [interviews, setInterviews] = useState<any[]>([]);
+    const [interviews, setInterviews] = useState<Array<{
+        id: string;
+        created_at?: string;
+        participant_pseudonym?: string;
+        transcription_status?: string;
+    }>>([]);
     const [openInterview, setOpenInterview] = useState<string | null>(null);
 
-    const fetchInterviewStatuses = async () => {
+    const fetchInterviewStatuses = useCallback(async () => {
         if (!projectId) return;
         try {
             const response = await apiClient(`interviews/${projectId}`);
@@ -29,17 +34,17 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
         } catch (error) {
             console.error("Error fetching interview statuses:", error);
         }
-    };
+    }, [projectId]);
 
     useEffect(() => {
         fetchInterviewStatuses();
-    }, [projectId]);
+    }, [fetchInterviewStatuses]);
 
     useEffect(() => {
         if (!projectId) return;
         const intervalId = setInterval(fetchInterviewStatuses, 10000);
         return () => clearInterval(intervalId);
-    }, [projectId]);
+    }, [projectId, fetchInterviewStatuses]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -133,7 +138,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                                     <div key={item.id} className="flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-3">
                                             <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
-                                            <button onClick={() => setOpenInterview(item.id)} className="text-indigo-600 text-xs font-bold">Ver</button>
+                                            <button type="button" onClick={() => setOpenInterview(item.id)} className="text-indigo-600 text-xs font-bold">Ver</button>
                                             <button onClick={async () => {
                                                 // start export single interview as json (fire-and-forget / poll)
                                                 if (!projectId) return;
@@ -162,7 +167,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                                                     console.error(e);
                                                     alert("Error iniciando export");
                                                 }
-                                            }} className="text-zinc-600 text-xs">Exportar</button>
+                                            }} type="button" className="text-zinc-600 text-xs">Exportar</button>
                                         </div>
                                         <span className="font-medium">{statusLabel}</span>
                                     </div>
@@ -172,7 +177,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                     </div>
                 )}
                 <div className="mt-3">
-                    <button onClick={async () => {
+                    <button type="button" onClick={async () => {
                         if (!projectId) return;
                         try {
                             const resp = await apiClient(`interviews/export`, {
