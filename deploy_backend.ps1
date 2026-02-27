@@ -15,7 +15,7 @@ $imageName = "theogen-backend:latest"
 # Verificar inicio de sesión en Azure
 Write-Host "`nVerificando sesión en Azure..." -ForegroundColor Yellow
 $account = az account show --query "name" -o tsv 2>$null
-if ($null -eq $account) {
+if ([string]::IsNullOrWhiteSpace($account)) {
     Write-Host "❌ Error: No hay sesión activa en Azure. Por favor ejecuta 'az login' primero." -ForegroundColor Red
     exit 1
 }
@@ -51,24 +51,44 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "✅ Imagen construida y almacenada en $acrName.azurecr.io/$imageName" -ForegroundColor Green
 
+# Limpiar manifests sin tag en ACR (evita acumulación de imágenes obsoletas, equivalente al delete-batch del frontend)
+Write-Host "Limpiando manifests sin tag (obsoletos) en ACR..." -ForegroundColor Yellow
+az acr run --registry $acrName --cmd "acr purge --filter 'theogen-backend:.*' --untagged --ago 0d" /dev/null --output none 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Advertencia: no se pudieron limpiar manifests obsoletos en ACR (puede que no existan)." -ForegroundColor Yellow
+} else {
+    Write-Host "Manifests obsoletos limpiados del ACR." -ForegroundColor Green
+}
+
 # 2. Forzar nueva revisión con suffix único (evita que ACA ignore el mismo tag :latest)
 $revisionSuffix = "deploy-$(Get-Date -Format 'yyMMdd-HHmm')"
 Write-Host "`n[2/2] Creando nueva revisión: $revisionSuffix ..." -ForegroundColor Yellow
 
+# az containerapp update devuelve exit code 1 por warnings de progreso en stderr aunque haya éxito.
+# Se omite --output none para que errores reales (auth, imagen incorrecta) sean visibles en consola.
 az containerapp update `
     --name $containerAppName `
     --resource-group $resourceGroup `
     --image "$($acrName).azurecr.io/$imageName" `
-    --revision-suffix $revisionSuffix `
-    --output none 2>&1 | Out-Null
+    --revision-suffix $revisionSuffix
 
-# az containerapp update devuelve exit code 1 por warnings de progreso en stderr aunque haya éxito.
-# Verificamos directamente el estado de la revisión.
-Start-Sleep -Seconds 5
+# Esperar a que ACA complete el aprovisionamiento (puede tardar entre 30 y 120 s)
+$maxWait = 120
+$interval = 10
+$elapsed = 0
+$provisioningState = ""
+Write-Host "Esperando confirmación de aprovisionamiento..." -ForegroundColor Gray
+while ($elapsed -lt $maxWait) {
+    Start-Sleep -Seconds $interval
+    $elapsed += $interval
+    $provisioningState = az containerapp show --name $containerAppName --resource-group $resourceGroup `
+        --query "properties.provisioningState" -o tsv 2>$null
+    Write-Host "  [$elapsed s] Estado: $provisioningState" -ForegroundColor Gray
+    if ($provisioningState -eq "Succeeded" -or $provisioningState -eq "Failed") { break }
+}
+
 $latestRevision = az containerapp show --name $containerAppName --resource-group $resourceGroup `
     --query "properties.latestRevisionName" -o tsv 2>$null
-$provisioningState = az containerapp show --name $containerAppName --resource-group $resourceGroup `
-    --query "properties.provisioningState" -o tsv 2>$null
 $fqdn = az containerapp show --name $containerAppName --resource-group $resourceGroup `
     --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
 
@@ -85,6 +105,15 @@ if ($provisioningState -ne "Succeeded") {
     exit 1
 }
 
+# Desactivar revisiones antiguas en ACA (evita acumulación hasta el límite de 100)
+Write-Host "Desactivando revisiones antiguas..." -ForegroundColor Yellow
+$oldRevisions = az containerapp revision list --name $containerAppName --resource-group $resourceGroup `
+    --query "[?name!='$latestRevision'].name" -o tsv 2>$null
+foreach ($rev in ($oldRevisions -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+    Write-Host "  Desactivando: $rev" -ForegroundColor Gray
+    az containerapp revision deactivate --name $containerAppName --resource-group $resourceGroup --revision $rev --output none 2>$null
+}
+Write-Host "Revisiones antiguas desactivadas." -ForegroundColor Green
 Write-Host "`n=========================================" -ForegroundColor Green
 Write-Host "✅ Backend desplegado exitosamente!" -ForegroundColor Green
 Write-Host "Revisión: $latestRevision" -ForegroundColor Cyan

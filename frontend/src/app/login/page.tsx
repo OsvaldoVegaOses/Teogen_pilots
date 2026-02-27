@@ -85,6 +85,12 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-zinc-900 dark:focus:bg-zinc-900 dark:focus:text-zinc-100"
+      >
+        Saltar al contenido principal
+      </a>
       <header className="fixed top-0 z-50 w-full border-b border-zinc-200/50 bg-zinc-50/80 backdrop-blur-md dark:border-zinc-800/50 dark:bg-zinc-950/80">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
@@ -104,7 +110,7 @@ export default function Login() {
         </div>
       </header>
 
-      <main className="flex-1 pt-16 flex items-center justify-center">
+      <main id="main-content" className="flex-1 pt-16 flex items-center justify-center">
         <div className="w-full max-w-md space-y-8 p-8 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight">Bienvenido</h2>

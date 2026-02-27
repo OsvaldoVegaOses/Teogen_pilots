@@ -143,6 +143,19 @@ if ($storageAccountName) {
     
     $distPath = "$frontendPath\out"
     if (Test-Path $distPath) {
+        # Limpiar archivos obsoletos del contenedor antes de subir (evita stale files)
+        Write-Host "Limpiando archivos obsoletos en el contenedor `$web..." -ForegroundColor Yellow
+        az storage blob delete-batch `
+            --account-name $storageAccountName `
+            --account-key $storageKey `
+            --source '$web' `
+            --output none 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Advertencia: no se pudo limpiar el contenedor `$web (puede estar vacío)." -ForegroundColor Yellow
+        } else {
+            Write-Host "Contenedor `$web limpiado correctamente." -ForegroundColor Green
+        }
+
         # Usar az storage blob upload-batch para subir todo el directorio de una vez
         # Es mucho más rápido y maneja las rutas relativas correctamente
         az storage blob upload-batch `

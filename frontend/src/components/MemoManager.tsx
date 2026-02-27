@@ -103,11 +103,11 @@ export default function MemoManager({ projectId }: { projectId: string }) {
                                 {memo.memo_type}
                             </span>
                         </div>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-3">{memo.content}</p>
-                        <p className="text-[10px] mt-4 text-zinc-400">{new Date(memo.created_at).toLocaleDateString()}</p>
+                        <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-3">{memo.content}</p>
+                        <p className="mt-4 text-[10px] text-zinc-600 dark:text-zinc-300">{new Date(memo.created_at).toLocaleDateString()}</p>
                     </div>
                 ))}
-                {memos.length === 0 && <p className="text-center text-sm text-zinc-400 py-10">No hay memos aún.</p>}
+                {memos.length === 0 && <p className="py-10 text-center text-sm text-zinc-600 dark:text-zinc-300">No hay memos aún.</p>}
             </div>
         </div>
     );

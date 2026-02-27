@@ -87,7 +87,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
             <h3 className="text-xl font-bold mb-4 dark:text-white">Subir Nueva Entrevista</h3>
             <form onSubmit={handleUpload} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-zinc-500 mb-1">Seudónimo del Participante (opcional)</label>
+                    <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300 mb-1">Seudónimo del Participante (opcional)</label>
                     <input
                         type="text"
                         value={pseudonym}
@@ -97,7 +97,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                     />
                 </div>
                 <div>
-                    <label htmlFor={`interview-file-${projectId}`} className="block text-sm font-medium text-zinc-500 mb-1">Archivo de Audio o Transcripción</label>
+                    <label htmlFor={`interview-file-${projectId}`} className="block text-sm font-medium text-zinc-600 dark:text-zinc-300 mb-1">Archivo de Audio o Transcripción</label>
                     <input
                         id={`interview-file-${projectId}`}
                         name="file"
@@ -106,7 +106,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                         title="Selecciona un archivo de audio o una transcripción"
                         aria-label="Archivo de audio o transcripción"
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        className="block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
+                        className="block w-full text-sm text-zinc-600 dark:text-zinc-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
                     />
                 </div>
                 <button
@@ -120,7 +120,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
 
                 {interviews.length > 0 && (
                     <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950">
-                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">Estado de procesamiento</p>
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">Estado de procesamiento</p>
                         <div className="space-y-2">
                             {interviews.slice(0, 3).map((item) => {
                                 const status = item.transcription_status || "unknown";
@@ -137,7 +137,7 @@ export default function InterviewUpload({ projectId, onUploadSuccess }: { projec
                                 return (
                                     <div key={item.id} className="flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-3">
-                                            <span className="truncate pr-2 text-zinc-600 dark:text-zinc-400">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
+                                            <span className="truncate pr-2 text-zinc-700 dark:text-zinc-300">{item.participant_pseudonym || "Entrevista sin seudónimo"}</span>
                                             <button type="button" onClick={() => setOpenInterview(item.id)} className="text-indigo-600 text-xs font-bold">Ver</button>
                                             <button onClick={async () => {
                                                 // start export single interview as json (fire-and-forget / poll)

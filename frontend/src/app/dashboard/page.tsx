@@ -538,6 +538,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (!mobileNavOpen) return;
+        const triggerButton = mobileMenuButtonRef.current;
 
         const focusable = mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
             'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
@@ -565,7 +566,7 @@ export default function Dashboard() {
         document.addEventListener("keydown", onKeyDown);
         return () => {
             document.removeEventListener("keydown", onKeyDown);
-            mobileMenuButtonRef.current?.focus();
+            triggerButton?.focus();
         };
     }, [mobileNavOpen]);
 
@@ -844,6 +845,12 @@ export default function Dashboard() {
 
     return (
         <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-hidden">
+            <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-zinc-900 dark:focus:bg-zinc-900 dark:focus:text-zinc-100"
+            >
+                Saltar al contenido principal
+            </a>
             {mobileNavOpen && (
                 <button
                     type="button"
@@ -977,7 +984,7 @@ export default function Dashboard() {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col min-w-0">
+            <main id="main-content" className="flex-1 flex flex-col min-w-0">
                 <header className="border-b border-zinc-100 bg-white/50 p-4 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50 md:p-8">
                     <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
                         <div>
@@ -986,7 +993,7 @@ export default function Dashboard() {
                                 type="button"
                                 onClick={() => setMobileNavOpen(true)}
                                 className="mb-3 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-bold hover:bg-zinc-50 dark:border-zinc-800 dark:text-white md:hidden"
-                                aria-expanded={mobileNavOpen}
+                                aria-expanded={mobileNavOpen ? "true" : "false"}
                                 aria-controls="dashboard-mobile-drawer"
                                 aria-haspopup="dialog"
                             >
@@ -1038,7 +1045,7 @@ export default function Dashboard() {
                                     type="button"
                                     onClick={() => setShowHeaderActionsMenu((prev) => !prev)}
                                     className="rounded-2xl border border-zinc-200 px-4 py-2 text-xs font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
-                                    aria-expanded={showHeaderActionsMenu}
+                                    aria-expanded={showHeaderActionsMenu ? "true" : "false"}
                                     aria-controls="dashboard-more-actions"
                                     aria-haspopup="menu"
                                 >

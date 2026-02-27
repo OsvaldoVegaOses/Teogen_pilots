@@ -326,7 +326,7 @@ export default function TheoryViewer({
                     <h2 className="text-2xl font-bold dark:text-white mb-2">
                         Teoria Fundamentada (v{theory.version})
                     </h2>
-                    <div className="flex items-center gap-3 text-sm text-zinc-500">
+                    <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300">
                         <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium dark:bg-indigo-900/30 dark:text-indigo-300">
                             {displayModelName(theory.generated_by)}
                         </span>
@@ -407,7 +407,7 @@ export default function TheoryViewer({
                                         <li key={i} className="text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap">
                                             {toDisplayText(it)}
                                             {getEvidenceIds(it).length > 0 && (
-                                                <div className="mt-1 text-[11px] text-zinc-500">
+                                                <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300">
                                                     evidence_ids: {getEvidenceIds(it).slice(0, 5).join(", ")}
                                                     {getEvidenceIds(it).length > 5 ? " ..." : ""}
                                                 </div>
@@ -434,11 +434,11 @@ export default function TheoryViewer({
                                     {idx + 1}
                                 </span>
                                 <div className="min-w-0">
-                                    <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-sm break-words whitespace-pre-wrap">
+                                    <p className="text-zinc-700 dark:text-zinc-300 leading-relaxed text-sm break-words whitespace-pre-wrap">
                                         {toDisplayText(prop)}
                                     </p>
                                     {getEvidenceIds(prop).length > 0 && (
-                                        <div className="mt-1 text-[11px] text-zinc-500">
+                                        <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300">
                                             evidence_ids: {getEvidenceIds(prop).slice(0, 5).join(", ")}
                                             {getEvidenceIds(prop).length > 5 ? " ..." : ""}
                                         </div>
@@ -452,22 +452,22 @@ export default function TheoryViewer({
                         <h4 className="font-bold text-zinc-700 dark:text-zinc-200 mb-3">Cuadros y correlaciones (Neo4j/Qdrant)</h4>
                         <div className="grid gap-3 text-sm">
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
-                                <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Cobertura de evidencia</div>
-                                <div className="text-zinc-600 dark:text-zinc-400">
+                                <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Cobertura de evidencia</div>
+                                <div className="text-zinc-700 dark:text-zinc-300">
                                     Proposiciones con evidencia: {evidenceCoverage.propsWithEvidence}/{evidenceCoverage.propsTotal} · Consecuencias con evidencia: {evidenceCoverage.consWithEvidence}/{evidenceCoverage.consTotal}
                                 </div>
                             </div>
 
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
-                                <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Grafo (Neo4j)</div>
-                                <div className="text-zinc-600 dark:text-zinc-400">
+                                <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Grafo (Neo4j)</div>
+                                <div className="text-zinc-700 dark:text-zinc-300">
                                     Categorias: {Number(counts.category_count ?? 0)} · Codigos: {Number(counts.code_count ?? 0)} · Fragmentos: {Number(counts.fragment_count ?? 0)}
                                 </div>
                                 {centrality.length > 0 && (
                                     <div className="mt-3 overflow-auto">
                                         <table className="w-full text-xs">
                                             <thead>
-                                                <tr className="text-left text-zinc-500">
+                                                <tr className="text-left text-zinc-600 dark:text-zinc-300">
                                                     <th className="py-1 pr-2">Categoria</th>
                                                     <th className="py-1 pr-2">PageRank</th>
                                                     <th className="py-1 pr-2">GDS degree</th>
@@ -481,10 +481,10 @@ export default function TheoryViewer({
                                                     return (
                                                     <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                                                         <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_name || r.category_id)}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.pagerank ?? "")}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.gds_degree ?? "")}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.code_degree ?? "")}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.fragment_degree ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.pagerank ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.gds_degree ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.code_degree ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.fragment_degree ?? "")}</td>
                                                     </tr>
                                                 )})}
                                             </tbody>
@@ -493,10 +493,10 @@ export default function TheoryViewer({
                                 )}
                                 {cooccurrence.length > 0 && (
                                     <div className="mt-3 overflow-auto">
-                                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Coocurrencias (proxy de correlacion)</div>
+                                        <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Coocurrencias (proxy de correlacion)</div>
                                         <table className="w-full text-xs">
                                             <thead>
-                                                <tr className="text-left text-zinc-500">
+                                                <tr className="text-left text-zinc-600 dark:text-zinc-300">
                                                     <th className="py-1 pr-2">A</th>
                                                     <th className="py-1 pr-2">B</th>
                                                     <th className="py-1 pr-2">Shared</th>
@@ -509,7 +509,7 @@ export default function TheoryViewer({
                                                     <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                                                         <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_a_name || r.category_a_id)}</td>
                                                         <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.category_b_name || r.category_b_id)}</td>
-                                                        <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{toDisplayText(r.shared_fragments ?? "")}</td>
+                                                        <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{toDisplayText(r.shared_fragments ?? "")}</td>
                                                     </tr>
                                                 )})}
                                             </tbody>
@@ -519,9 +519,9 @@ export default function TheoryViewer({
                             </div>
 
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
-                                <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Evidencia semantica (Qdrant)</div>
+                                <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Evidencia semantica (Qdrant)</div>
                                 {semanticEvidence.length === 0 ? (
-                                    <div className="text-zinc-500">Sin evidencia registrada en validacion.</div>
+                                    <div className="text-zinc-600 dark:text-zinc-300">Sin evidencia registrada en validacion.</div>
                                 ) : (
                                     <div className={`space-y-3 ${expanded.evidence ? "" : "max-h-72 overflow-auto"}`}>
                                         {semanticEvidence.slice(0, expanded.evidence ? 50 : 15).map((item, i: number) => {
@@ -535,8 +535,8 @@ export default function TheoryViewer({
                                                     {asItems(bucket.fragments).slice(0, 3).map((fragment, j: number) => {
                                                         const f = fragment as LooseRecord;
                                                         return (
-                                                        <div key={j} className="text-xs text-zinc-600 dark:text-zinc-400">
-                                                            <div className="text-[11px] text-zinc-500">
+                                                        <div key={j} className="text-xs text-zinc-700 dark:text-zinc-300">
+                                                            <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
                                                                 fragment_id: {toDisplayText(f.fragment_id || f.id)} · score: {toDisplayText(f.score ?? "")}
                                                             </div>
                                                             <div className="whitespace-pre-wrap break-words">{toDisplayText(f.text)}</div>
@@ -563,8 +563,8 @@ export default function TheoryViewer({
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                                     <div>
-                                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Ver evidencia por claim</div>
-                                        <div className="text-[11px] text-zinc-500">
+                                        <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Ver evidencia por claim</div>
+                                        <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
                                             Fuente: {claimsData?.source || "cargando"} · Total: {claimsTotal}
                                         </div>
                                     </div>
@@ -604,13 +604,13 @@ export default function TheoryViewer({
                                 </div>
 
                                 {claimsLoading ? (
-                                    <div className="text-sm text-zinc-500">Cargando evidencia por claim...</div>
+                                    <div className="text-sm text-zinc-600 dark:text-zinc-300">Cargando evidencia por claim...</div>
                                 ) : claimsError ? (
                                     <div className="text-sm text-amber-600">{claimsError}</div>
                                 ) : (
                                     <>
                                         {(claimsData?.claims || []).length === 0 ? (
-                                            <div className="text-sm text-zinc-500">Sin claims para los filtros seleccionados.</div>
+                                            <div className="text-sm text-zinc-600 dark:text-zinc-300">Sin claims para los filtros seleccionados.</div>
                                         ) : (
                                             <div className={`space-y-3 ${expanded.claimsExplain ? "" : "max-h-80 overflow-auto"}`}>
                                                 {(claimsData?.claims || []).map((claim: ClaimExplainItem, idx: number) => (
@@ -619,7 +619,7 @@ export default function TheoryViewer({
                                                             [{claim.section}] {claim.text}
                                                         </div>
                                                         {asItems(claim.categories).length > 0 && (
-                                                            <div className="mt-1 text-[11px] text-zinc-500 break-words">
+                                                            <div className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300 break-words">
                                                                 Categorias: {asItems(claim.categories).map((category) => {
                                                                     const cat = category as LooseRecord;
                                                                     return cat?.name || cat?.id;
@@ -628,7 +628,7 @@ export default function TheoryViewer({
                                                         )}
                                                         <div className="mt-1 space-y-1">
                                                             {claim.evidence.slice(0, 5).map((ev: ClaimExplainEvidence, j: number) => (
-                                                                <div key={`${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                                                                <div key={`${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-700 dark:text-zinc-300">
                                                                     <div>
                                                                         fragment_id: {ev.fragment_id} · score: {ev.score ?? ""} · rank: {ev.rank ?? ""}
                                                                     </div>
@@ -656,7 +656,7 @@ export default function TheoryViewer({
                                             >
                                                 Anterior
                                             </button>
-                                            <div className="text-[11px] text-zinc-500">
+                                            <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
                                                 Mostrando {claimsFrom}-{claimsTo} de {claimsTotal}
                                             </div>
                                             <button
@@ -679,7 +679,7 @@ export default function TheoryViewer({
                     {theory.gaps.length > 0 && (
                         <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800">
                             <h4 className="font-bold text-amber-600 mb-3">Brechas Identificadas</h4>
-                            <ul className="list-disc list-inside text-sm text-zinc-500 space-y-1 pl-2">
+                            <ul className="list-disc list-inside text-sm text-zinc-600 dark:text-zinc-300 space-y-1 pl-2">
                                 {theory.gaps.map((gap, i) => (
                                     <li key={i} className="break-words whitespace-pre-wrap">{toDisplayText(gap)}</li>
                                 ))}

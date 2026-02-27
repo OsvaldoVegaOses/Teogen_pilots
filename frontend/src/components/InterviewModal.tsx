@@ -139,7 +139,7 @@ export default function InterviewModal({ interviewId, projectId, onClose, seekMs
                         {segments.map((s) => (
                             <div key={s.fragment_id} data-fragment-id={s.fragment_id} data-start-ms={s.start_ms} className={`rounded-lg border p-3 ${highlightFragment === s.fragment_id ? 'ring-2 ring-indigo-400' : ''}`}>
                                 <div className="flex justify-between items-start">
-                                    <div className="text-xs text-zinc-500 mb-1">{s.speaker_id} · {s.start_ms ? `${Math.round(s.start_ms/1000)}s` : ''}</div>
+                                    <div className="mb-1 text-xs text-zinc-600 dark:text-zinc-300">{s.speaker_id} · {s.start_ms ? `${Math.round(s.start_ms/1000)}s` : ''}</div>
                                     <div className="flex gap-2">
                                         {s.start_ms != null && (
                                             <button onClick={() => {
@@ -155,7 +155,7 @@ export default function InterviewModal({ interviewId, projectId, onClose, seekMs
                                 <div className="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">{s.text}</div>
                             </div>
                         ))}
-                        {segments.length === 0 && <p className="text-sm text-zinc-500">No hay segmentos disponibles.</p>}
+                        {segments.length === 0 && <p className="text-sm text-zinc-600 dark:text-zinc-300">No hay segmentos disponibles.</p>}
                     </div>
                 )}
 

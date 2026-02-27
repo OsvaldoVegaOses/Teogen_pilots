@@ -56,7 +56,7 @@ export default function ExportPanel({ projectId: _projectId }: { projectId?: str
         <div className="rounded-xl border p-4 bg-white dark:bg-zinc-900">
             <h4 className="font-bold mb-2">Exportaciones recientes</h4>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-                {tasks.length === 0 && <p className="text-sm text-zinc-500">No hay exportaciones en el historial.</p>}
+                {tasks.length === 0 && <p className="text-sm text-zinc-600 dark:text-zinc-300">No hay exportaciones en el historial.</p>}
                 {tasks.map(t => {
                     const s = statuses[t.task_id];
                     return (

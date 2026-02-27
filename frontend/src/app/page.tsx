@@ -75,6 +75,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!mobileNavOpen) return;
+    const triggerButton = mobileMenuButtonRef.current;
 
     const focusable = mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
@@ -102,12 +103,18 @@ export default function Home() {
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      mobileMenuButtonRef.current?.focus();
+      triggerButton?.focus();
     };
   }, [mobileNavOpen]);
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-zinc-900 dark:focus:bg-zinc-900 dark:focus:text-zinc-100"
+      >
+        Saltar al contenido principal
+      </a>
       {mobileNavOpen && (
         <button
           type="button"
@@ -140,7 +147,7 @@ export default function Home() {
             type="button"
             onClick={() => setMobileNavOpen(true)}
             className="rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-bold hover:bg-zinc-50 dark:border-zinc-700 md:hidden"
-            aria-expanded={mobileNavOpen}
+            aria-expanded={mobileNavOpen ? "true" : "false"}
             aria-controls="landing-mobile-drawer"
             aria-haspopup="dialog"
           >
@@ -185,7 +192,7 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="flex-1 pt-16">
+      <main id="main-content" className="flex-1 pt-16">
         <section className="relative overflow-hidden py-16 sm:py-24 md:py-32">
           <div className="absolute inset-0 -z-10">
             <div className="ambient-glow absolute left-1/2 top-[-180px] h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-indigo-500/20 blur-3xl" />
