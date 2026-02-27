@@ -12,10 +12,19 @@ import type { Theory as TheoryViewerTheory } from "@/components/TheoryViewer";
 import InterviewModal from "@/components/InterviewModal";
 import ExportPanel, { enqueueLocalExport } from "@/components/ExportPanel";
 import AuthenticatedChatbot from "@/components/assistant/AuthenticatedChatbot";
+import AssistantOpsPanel from "@/components/assistant/AssistantOpsPanel";
+import {
+    clearBrowserSession,
+    getBaseSessionProfile,
+    loadSessionProfile,
+    saveSessionProfile,
+    type SessionProfile,
+} from "@/lib/sessionProfile";
+import { DASHBOARD_UPDATES, DASHBOARD_UPDATES_VERSION } from "@/lib/dashboardUpdates";
 
 const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
 type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
-type DashboardTab = "overview" | "codes" | "interviews" | "memos";
+type DashboardTab = "overview" | "codes" | "interviews" | "memos" | "assistant_ops";
 type TheoryViewerStateSnapshot = {
     sectionFilter: string;
     claimTypeFilter: string;
@@ -119,11 +128,17 @@ function isDomainTemplate(value: string): value is DomainTemplate {
 }
 
 function isDashboardTab(value: string): value is DashboardTab {
-    return value === "overview" || value === "codes" || value === "interviews" || value === "memos";
+    return value === "overview" || value === "codes" || value === "interviews" || value === "memos" || value === "assistant_ops";
+}
+
+function getInitials(name: string): string {
+    const parts = (name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    if (!parts.length) return "TG";
+    return parts.map((part) => part[0]?.toUpperCase() || "").join("");
 }
 
 export default function Dashboard() {
-    const { inProgress } = useMsal();
+    const { inProgress, instance, accounts } = useMsal();
     const msalIsAuthenticated = useIsAuthenticated();
     const [googleAuth, setGoogleAuth] = useState(false);
     const isAuthenticated = msalIsAuthenticated || googleAuth;
@@ -135,6 +150,60 @@ export default function Dashboard() {
     useEffect(() => {
         setGoogleAuth(!!getGoogleToken());
     }, []);
+
+    useEffect(() => {
+        const baseProfile = getBaseSessionProfile(accounts);
+        const resolved = loadSessionProfile(baseProfile);
+        setSessionProfile(resolved);
+        setProfileForm({
+            displayName: resolved.displayName,
+            organization: resolved.organization,
+        });
+    }, [accounts, googleAuth]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadRemoteProfile() {
+            const baseProfile = getBaseSessionProfile(accounts);
+            if (baseProfile.provider !== "microsoft" || !accounts.length) {
+                return;
+            }
+            try {
+                const { apiClient } = await import("@/lib/api");
+                const response = await apiClient("/profile/me");
+                if (!response.ok) return;
+                const payload = (await response.json()) as {
+                    email?: string | null;
+                    display_name: string;
+                    organization?: string | null;
+                };
+                if (cancelled) return;
+                const nextProfile: SessionProfile = {
+                    email: payload.email || baseProfile.email,
+                    provider: "microsoft",
+                    displayName: payload.display_name || baseProfile.displayName,
+                    organization: payload.organization || "",
+                };
+                setSessionProfile(nextProfile);
+                setProfileForm({
+                    displayName: nextProfile.displayName,
+                    organization: nextProfile.organization,
+                });
+                saveSessionProfile({
+                    displayName: nextProfile.displayName,
+                    organization: nextProfile.organization,
+                });
+            } catch {
+                // Keep local fallback if backend profile is unavailable.
+            }
+        }
+
+        void loadRemoteProfile();
+        return () => {
+            cancelled = true;
+        };
+    }, [accounts]);
 
     useEffect(() => {
         // Only redirect if MSAL is done processing, no MSAL account, and no Google token
@@ -162,12 +231,23 @@ export default function Dashboard() {
     const [theoryDone, setTheoryDone] = useState(false);
     const [theoryFailed, setTheoryFailed] = useState(false);
     const [showResetUiModal, setShowResetUiModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
     const [showEditProjectModal, setShowEditProjectModal] = useState(false);
     const [creatingProject, setCreatingProject] = useState(false);
     const [createProjectError, setCreateProjectError] = useState<string | null>(null);
     const [editingProject, setEditingProject] = useState(false);
     const [editProjectError, setEditProjectError] = useState<string | null>(null);
+    const [sessionProfile, setSessionProfile] = useState<SessionProfile>(() =>
+        loadSessionProfile(getBaseSessionProfile([]))
+    );
+    const [profileForm, setProfileForm] = useState({ displayName: "", organization: "" });
+    const [loggingOut, setLoggingOut] = useState(false);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [showHeaderActionsMenu, setShowHeaderActionsMenu] = useState(false);
+    const headerActionsMenuRef = useRef<HTMLDivElement | null>(null);
+    const mobileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+    const mobileDrawerRef = useRef<HTMLElement | null>(null);
     const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>({
         name: "",
         domainTemplate: "generic",
@@ -232,6 +312,45 @@ export default function Dashboard() {
             resetDashboardUiState();
         }
         setShowResetUiModal(false);
+    }
+
+    function handleSaveProfile() {
+        const nextProfile = {
+            ...sessionProfile,
+            displayName: profileForm.displayName.trim() || sessionProfile.displayName,
+            organization: profileForm.organization.trim(),
+        };
+        saveSessionProfile({
+            displayName: nextProfile.displayName,
+            organization: nextProfile.organization,
+        });
+        setSessionProfile(nextProfile);
+        if (nextProfile.provider === "microsoft") {
+            void (async () => {
+                try {
+                    const { apiClient } = await import("@/lib/api");
+                    await apiClient("/profile/me", {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                            display_name: nextProfile.displayName,
+                            organization: nextProfile.organization || null,
+                        }),
+                    });
+                } catch {
+                    // Keep local persistence even if remote save fails.
+                }
+            })();
+        }
+        setShowProfileModal(false);
+    }
+
+    async function handleLogout() {
+        setLoggingOut(true);
+        try {
+            await clearBrowserSession(instance);
+        } catch {
+            window.location.replace("/");
+        }
     }
 
     useEffect(() => {
@@ -384,6 +503,72 @@ export default function Dashboard() {
         }
     }, [selectedProjectId, isAuthenticated]);
 
+    useEffect(() => {
+        if (!showHeaderActionsMenu) return;
+
+        const onPointerDown = (event: MouseEvent | TouchEvent) => {
+            const target = event.target as Node | null;
+            if (!target) return;
+            if (headerActionsMenuRef.current?.contains(target)) return;
+            setShowHeaderActionsMenu(false);
+        };
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setShowHeaderActionsMenu(false);
+            }
+        };
+
+        document.addEventListener("mousedown", onPointerDown);
+        document.addEventListener("touchstart", onPointerDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", onPointerDown);
+            document.removeEventListener("touchstart", onPointerDown);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+    }, [showHeaderActionsMenu]);
+
+    useEffect(() => {
+        document.body.style.overflow = mobileNavOpen ? "hidden" : "";
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [mobileNavOpen]);
+
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+
+        const focusable = mobileDrawerRef.current?.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable?.[0];
+        const last = focusable?.[focusable.length - 1];
+        first?.focus();
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setMobileNavOpen(false);
+                return;
+            }
+            if (event.key !== "Tab" || !focusable?.length) return;
+
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first?.focus();
+            }
+        };
+
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("keydown", onKeyDown);
+            mobileMenuButtonRef.current?.focus();
+        };
+    }, [mobileNavOpen]);
+
     async function handleSync() {
         setLoadingProjects(true);
         try {
@@ -444,7 +629,7 @@ export default function Dashboard() {
             }
         } catch (error) {
             console.error("Creation error:", error);
-            setCreateProjectError("Error de conexión al crear proyecto.");
+                setCreateProjectError("Error de conexión al crear proyecto.");
         } finally {
             setCreatingProject(false);
         }
@@ -561,7 +746,7 @@ export default function Dashboard() {
 
             if (!enqueueResp.ok) {
                 const err = await enqueueResp.json().catch(() => ({}));
-                setTheoryMessage(`❌ ${err.detail || "No se pudo iniciar la generación."}`);
+                setTheoryMessage(err.detail || "No se pudo iniciar la generación.");
                 setGeneratingTheory(false);
                 return;
             }
@@ -659,8 +844,17 @@ export default function Dashboard() {
 
     return (
         <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-hidden">
-            {/* Sidebar */}
-            <aside className="w-64 border-r border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 shrink-0">
+            {mobileNavOpen && (
+                <button
+                    type="button"
+                    onClick={() => setMobileNavOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/40 md:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
+                    aria-label="Cerrar menu"
+                />
+            )}
+
+            {/* Sidebar desktop */}
+            <aside className="hidden w-52 shrink-0 border-r border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 lg:w-56 lg:p-5 md:block">
                 <div className="flex items-center gap-2 mb-10">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white">
                         T
@@ -670,79 +864,234 @@ export default function Dashboard() {
                 <nav className="flex flex-col gap-2">
                     <button
                         onClick={() => setActiveTab("overview")}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'overview' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'overview' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
                     >
-                        📊 Dashboard
+                        Resumen
                     </button>
                     <button
                         onClick={() => setActiveTab("codes")}
                         disabled={!selectedProjectId}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        📚 Libro de Códigos
+                        Libro de Códigos
                     </button>
                     <button
                         onClick={() => setActiveTab("interviews")}
                         disabled={!selectedProjectId}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'interviews' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'interviews' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        🎙️ Entrevistas
+                        Entrevistas
                     </button>
                     <button
                         onClick={() => setActiveTab("memos")}
                         disabled={!selectedProjectId}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-500 hover:bg-zinc-100'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        📝 Memos
+                        Memos
+                    </button>
+                                    <button
+                        onClick={() => setActiveTab("assistant_ops")}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
+                    >
+                        Assistant Ops
+                    </button>
+                </nav>
+            </aside>
+
+            {/* Sidebar mobile */}
+            <aside
+                id="dashboard-mobile-drawer"
+                ref={mobileDrawerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Menu de navegacion del dashboard"
+                className={`fixed left-0 top-0 z-50 h-full w-56 border-r border-zinc-200 bg-white p-5 transition-transform duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-950 md:hidden ${
+                    mobileNavOpen ? "translate-x-0" : "-translate-x-full"
+                }`}
+            >
+                <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white">
+                            T
+                        </div>
+                        <span className="text-xl font-bold tracking-tight dark:text-white">TheoGen</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setMobileNavOpen(false)}
+                        className="rounded-lg border border-zinc-200 px-2 py-1 text-xs font-semibold dark:border-zinc-700 dark:text-white"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+                <nav className="flex flex-col gap-2">
+                    <button
+                        onClick={() => {
+                            setActiveTab("overview");
+                            setMobileNavOpen(false);
+                        }}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'overview' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
+                    >
+                        Resumen
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveTab("codes");
+                            setMobileNavOpen(false);
+                        }}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        Libro de Códigos
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveTab("interviews");
+                            setMobileNavOpen(false);
+                        }}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'interviews' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        Entrevistas
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveTab("memos");
+                            setMobileNavOpen(false);
+                        }}
+                        disabled={!selectedProjectId}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'memos' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        Memos
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveTab("assistant_ops");
+                            setMobileNavOpen(false);
+                        }}
+                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
+                    >
+                        Assistant Ops
                     </button>
                 </nav>
             </aside>
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col min-w-0">
-                <header className="border-b border-zinc-100 bg-white/50 p-8 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50">
-                    <div className="flex items-center justify-between gap-4">
+                <header className="border-b border-zinc-100 bg-white/50 p-4 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/50 md:p-8">
+                    <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4">
                         <div>
+                            <button
+                                ref={mobileMenuButtonRef}
+                                type="button"
+                                onClick={() => setMobileNavOpen(true)}
+                                className="mb-3 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-bold hover:bg-zinc-50 dark:border-zinc-800 dark:text-white md:hidden"
+                                aria-expanded={mobileNavOpen}
+                                aria-controls="dashboard-mobile-drawer"
+                                aria-haspopup="dialog"
+                            >
+                                Menu
+                            </button>
                             <h1 className="text-2xl font-bold dark:text-white">
                                 {activeTab === "overview" && "Panel de Control"}
                                 {activeTab === "codes" && "Exploración de Conceptos"}
                                 {activeTab === "interviews" && "Entrevistas"}
-                                {activeTab === "memos" && "Memos Analíticos"}
+                                {activeTab === "memos" && "Memos Analiticos"}
+                                {activeTab === "assistant_ops" && "Operaciones del Asistente"}
                             </h1>
                         </div>
-                        <div className="flex gap-4">
+                        <div className="flex w-full flex-wrap items-center justify-start gap-2 md:w-auto md:justify-end md:gap-3">
+                            <div className="hidden items-center gap-3 rounded-2xl border border-zinc-200 bg-white/80 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900/60 md:flex">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-sm font-bold text-white">
+                                    {getInitials(sessionProfile.displayName)}
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-white">{sessionProfile.displayName}</p>
+                                    <p className="text-xs text-zinc-500">{sessionProfile.email || "Sesion activa"}</p>
+                                    {sessionProfile.organization && (
+                                        <p className="text-[11px] text-zinc-400">{sessionProfile.organization}</p>
+                                    )}
+                                </div>
+                            </div>
                             <button
                                 onClick={handleSync}
-                                className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
+                                className="rounded-2xl border border-zinc-200 px-4 py-2 text-sm font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
                             >
                                 Sincronizar Cloud
                             </button>
-                        <button
-                            onClick={openEditProjectModal}
-                            disabled={!selectedProjectId}
-                            className="rounded-2xl border border-zinc-200 px-6 py-2 text-sm font-bold hover:bg-zinc-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed dark:border-zinc-800 dark:text-white"
-                        >
+                            <button
+                                onClick={openEditProjectModal}
+                                disabled={!selectedProjectId}
+                                className="rounded-2xl border border-zinc-200 px-4 py-2 text-sm font-bold hover:bg-zinc-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed dark:border-zinc-800 dark:text-white"
+                            >
                                 Editar Proyecto
                             </button>
                             <button
                                 onClick={() => openCreateProjectModal()}
-                                className="rounded-2xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
+                                className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
                             >
                                 + Nuevo Proyecto
                             </button>
-                            <button
-                                onClick={() => setShowResetUiModal(true)}
-                                className="rounded-2xl border border-amber-300 px-4 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-all"
-                                title="Limpiar estado persistido de la UI"
-                            >
-                                Reset UI
-                            </button>
+
+                            <div ref={headerActionsMenuRef} className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowHeaderActionsMenu((prev) => !prev)}
+                                    className="rounded-2xl border border-zinc-200 px-4 py-2 text-xs font-bold hover:bg-zinc-50 transition-all dark:border-zinc-800 dark:text-white"
+                                    aria-expanded={showHeaderActionsMenu}
+                                    aria-controls="dashboard-more-actions"
+                                    aria-haspopup="menu"
+                                >
+                                    Mas
+                                </button>
+                                {showHeaderActionsMenu && (
+                                    <div
+                                        id="dashboard-more-actions"
+                                        className="absolute right-0 z-20 mt-2 w-52 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-150"
+                                        role="menu"
+                                        aria-label="Acciones secundarias"
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setShowResetUiModal(true);
+                                                setShowHeaderActionsMenu(false);
+                                            }}
+                                            className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                                            title="Limpiar estado persistido de la UI"
+                                            role="menuitem"
+                                        >
+                                            Reset UI
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowProfileModal(true);
+                                                setShowHeaderActionsMenu(false);
+                                            }}
+                                            className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold hover:bg-zinc-100 dark:text-white dark:hover:bg-zinc-800"
+                                            role="menuitem"
+                                        >
+                                            Editar perfil
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowHeaderActionsMenu(false);
+                                                void handleLogout();
+                                            }}
+                                            disabled={loggingOut}
+                                            className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:text-red-300 dark:hover:bg-red-950/30"
+                                            role="menuitem"
+                                        >
+                                            {loggingOut ? "Cerrando..." : "Cerrar sesion"}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     {segmentPreset && (
                         <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 dark:border-indigo-900/60 dark:bg-indigo-950/40">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <p className="text-sm text-indigo-800 dark:text-indigo-300">
+                                    <p className="text-sm text-indigo-800 dark:text-indigo-300">
                                     Contexto aplicado: <span className="font-semibold">{segmentPreset.label}</span>.
                                     Puedes iniciar un proyecto con plantilla y descripción sugeridas.
                                 </p>
@@ -757,10 +1106,36 @@ export default function Dashboard() {
                     )}
                 </header>
 
-                <div className="flex-1 p-8 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8">
                     {activeTab === "overview" && (
-                        <div className="grid gap-10 lg:grid-cols-3">
-                            <div className="lg:col-span-2 grid gap-6 md:grid-cols-2 self-start">
+                        <div className="grid gap-8 xl:grid-cols-12">
+                            <div className="grid gap-6 self-start md:grid-cols-2 xl:col-span-8 2xl:col-span-9">
+                                <div className="col-span-2 rounded-3xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Mejoras recientes</p>
+                                            <h3 className="mt-2 text-xl font-bold dark:text-white">Actualizaciones del dashboard y la sesion</h3>
+                                            <p className="mt-2 text-sm text-zinc-500">
+                                                Estas mejoras ya estan activas en tu entorno actual. Version: {DASHBOARD_UPDATES_VERSION}
+                                            </p>
+                                        </div>
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
+                                            TG
+                                        </div>
+                                    </div>
+                                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                        {DASHBOARD_UPDATES.map((item) => (
+                                            <div
+                                                key={item.title}
+                                                className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/40"
+                                            >
+                                                <p className="text-sm font-semibold text-zinc-900 dark:text-white">{item.title}</p>
+                                                <p className="mt-1 text-xs leading-5 text-zinc-500">{item.description}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 {loadingProjects ? (
                                     <p className="text-zinc-500">Cargando proyectos...</p>
                                 ) : projects.length === 0 ? (
@@ -782,7 +1157,7 @@ export default function Dashboard() {
                                         >
                                             <div className="flex items-start justify-between mb-4">
                                                 <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">Active</span>
-                                                <span className="text-2xl">📁</span>
+                                                <span className="text-2xl">•</span>
                                             </div>
                                             <h3 className="text-xl font-bold dark:text-white truncate" title={project.name}>{project.name}</h3>
                                             <p className="mt-2 text-sm text-zinc-500 line-clamp-2">{project.description || "Sin descripción"}</p>
@@ -836,7 +1211,7 @@ export default function Dashboard() {
                                 )}
                             </div>
 
-                            <div className="space-y-6">
+                            <div className="space-y-6 xl:col-span-4 2xl:col-span-3">
                                 {selectedProjectId ? (
                                     <>
                                         <InterviewUpload
@@ -845,14 +1220,14 @@ export default function Dashboard() {
                                         />
 
                                         <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
-                                            <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
+                                                                    <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
 
                                             {/* Idle */}
                                             {!generatingTheory && !theoryDone && !theoryFailed && (
                                                 <>
                                                     <p className="text-white/80 text-sm mb-6">
                                                         {activeTheory
-                                                            ? "Teoría anterior disponible. Puedes regenerarla con los datos actuales."
+                                                                ? "Teoría anterior disponible. Puedes regenerarla con los datos actuales."
                                                             : "Analiza los datos del proyecto para buscar patrones emergentes."}
                                                     </p>
                                                     {activeTheory && (
@@ -880,7 +1255,7 @@ export default function Dashboard() {
                                                 </>
                                             )}
 
-                                            {/* Generating — progress bar */}
+                                            {/* Barra de progreso de generación */}
                                             {generatingTheory && (
                                                 <div>
                                                     <p className="text-white/80 text-sm mb-3">
@@ -917,7 +1292,7 @@ export default function Dashboard() {
                                             {theoryDone && (
                                                 <div>
                                                     <p className="text-white/90 text-sm mb-4">
-                                                        ✅ Teoría generada. Lista para revisar y exportar.
+                                                        … Teoría generada. Lista para revisar y exportar.
                                                     </p>
                                                     <div className="flex gap-2 mb-2">
                                                         <button
@@ -980,7 +1355,7 @@ export default function Dashboard() {
                         <div className="max-w-5xl mx-auto space-y-6">
                             <div className="rounded-3xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
                                 <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-xl font-bold dark:text-white">🎙️ Entrevistas del Proyecto</h3>
+                                    <h3 className="text-xl font-bold dark:text-white">Entrevistas del Proyecto</h3>
                                     <span className="text-sm text-zinc-500 font-medium">{interviews.length} entrevista{interviews.length !== 1 ? 's' : ''}</span>
                                 </div>
                                 {loadingInterviews ? (
@@ -1051,8 +1426,11 @@ export default function Dashboard() {
                             <MemoManager projectId={selectedProjectId} />
                         </div>
                     )}
+
+                    {activeTab === "assistant_ops" && <AssistantOpsPanel />}
                 </div>
             </main>
+
 
             {openInterviewId && (
                 <InterviewModal
@@ -1128,6 +1506,61 @@ export default function Dashboard() {
                                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
                             >
                                 {creatingProject ? "Creando..." : "Crear proyecto"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showProfileModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                        <h3 className="text-lg font-bold dark:text-white">Personalizar sesion</h3>
+                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                            Estos datos se guardan en este navegador para personalizar tu experiencia.
+                        </p>
+                        <div className="mt-5 space-y-4">
+                            <div>
+                                <label htmlFor="profile-email" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</label>
+                                <input
+                                    id="profile-email"
+                                    value={sessionProfile.email}
+                                    disabled
+                                    className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="profile-display-name" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Nombre visible</label>
+                                <input
+                                    id="profile-display-name"
+                                    value={profileForm.displayName}
+                                    onChange={(event) => setProfileForm((prev) => ({ ...prev, displayName: event.target.value }))}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="profile-organization" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Organizacion o cargo</label>
+                                <input
+                                    id="profile-organization"
+                                    value={profileForm.organization}
+                                    onChange={(event) => setProfileForm((prev) => ({ ...prev, organization: event.target.value }))}
+                                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                                    placeholder="Ej: ONG Tren Ciudadano / Investigacion"
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowProfileModal(false)}
+                                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveProfile}
+                                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+                            >
+                                Guardar perfil
                             </button>
                         </div>
                     </div>
@@ -1246,9 +1679,5 @@ export default function Dashboard() {
         </div>
     );
 }
-
-
-
-
 
 

@@ -8,7 +8,7 @@ from time import perf_counter
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import projects, theory, interviews, codes, memos, search
+from app.api import projects, theory, interviews, codes, memos, search, assistant, profile
 from app.core.settings import settings
 from app.services.neo4j_service import neo4j_service
 from app.services.qdrant_service import qdrant_service
@@ -98,6 +98,8 @@ app.include_router(codes.router, prefix="/api")
 app.include_router(memos.router, prefix="/api")
 app.include_router(theory.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
+app.include_router(assistant.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
 
 # (startup checks and shutdown cleanup handled by `lifespan`)
 

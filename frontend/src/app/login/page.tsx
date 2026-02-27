@@ -136,7 +136,7 @@ export default function Login() {
               {isLoading ? "Redirigiendo..." : "Iniciar Sesión con Microsoft"}
             </button>
 
-            <div className="flex justify-center w-full">
+            <div className="flex w-full justify-center">
               <GoogleLogin
                 onSuccess={(cr) => {
                   if (cr.credential) {
@@ -150,7 +150,7 @@ export default function Login() {
                 size="large"
                 text="continue_with"
                 shape="rectangular"
-                width={400}
+                width={320}
               />
             </div>
 

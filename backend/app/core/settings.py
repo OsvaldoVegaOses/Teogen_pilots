@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     MODEL_REASONING_FAST: str = "gpt-5.2-chat"
     MODEL_REASONING_EFFICIENT: str = "gpt-5.2-chat"
     MODEL_CHAT: str = "gpt-5.2-chat"
+    MODEL_ASSISTANT_PUBLIC: str = "gpt-5.2-chat"
+    MODEL_ASSISTANT_AUTHENTICATED: str = "gpt-5.2-chat"
     MODEL_EMBEDDING: str = "text-embedding-3-large"
     MODEL_TRANSCRIPTION: str = "gpt-4o-transcribe-diarize"
     MODEL_CLAUDE_ADVANCED: str = "gpt-5.2-chat"

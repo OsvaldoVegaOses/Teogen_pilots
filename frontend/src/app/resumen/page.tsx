@@ -116,7 +116,7 @@ export default function ResumenPage() {
                     <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{segment.name}</p>
                     <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{segment.pain}</p>
                     <Link
-                      href={`/signup?segment=${segment.key}`}
+                      href={`/login?segment=${segment.key}`}
                       className="mt-3 inline-flex rounded-lg border border-indigo-200 bg-indigo-50/70 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-900/70 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
                     >
                       {segment.cta}
@@ -129,7 +129,7 @@ export default function ResumenPage() {
         </section>
 
         <footer className="flex flex-wrap gap-3">
-          <Link href="/signup" className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">
+          <Link href="/login" className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">
             Probar gratis
           </Link>
           <Link href="/" className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-bold hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">

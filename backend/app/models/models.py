@@ -133,3 +133,15 @@ class Theory(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="theories")
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    email = Column(String(255))
+    display_name = Column(String(255), nullable=False)
+    organization = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

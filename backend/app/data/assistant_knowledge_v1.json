@@ -1,0 +1,23 @@
+{
+  "version": "v1",
+  "public": {
+    "contact": "Contacto empresarial: axial@nubeweb.cl y theogen@nubeweb.cl. Sitio: https://axial.nubeweb.cl. Referente: Osvaldo Vega Oses, Sociologo.",
+    "platform_overview": "TheoGen es una plataforma corporativa de insights cualitativos trazables. Convierte entrevistas y evidencia de campo en conclusiones accionables y defendibles.",
+    "segments": "TheoGen esta pensado para educacion, ONG, estudios de mercado, empresas B2C, consultorias y sector publico.",
+    "workflow": "Flujo general: 1) centralizar entrevistas, 2) detectar patrones, 3) recuperar evidencia relevante, 4) generar conclusiones trazables por claim.",
+    "commercial": "Para una demo o evaluacion comercial, escribe a axial@nubeweb.cl o theogen@nubeweb.cl. Tambien puedes iniciar una prueba desde 'Probar gratis'.",
+    "general": "Puedo ayudarte con informacion publica de la landing: propuesta de valor, segmentos, forma de uso y contacto comercial."
+  },
+  "authenticated": {
+    "technical_coding_flow": "En uso tecnico: primero carga entrevistas, luego ejecuta codificacion abierta para detectar conceptos, continua con axial para relacionar categorias, y finalmente selectiva para consolidar teoria central.",
+    "technical_theory_traceability": "Para teoria trazable: valida que cada claim tenga evidencia suficiente en fragmentos y diversidad de entrevistas. Usa el visor de teoria para revisar soporte antes de exportar resultados.",
+    "technical_interview_pipeline": "Recomendacion operativa: sube audio limpio por entrevista, revisa estado de transcripcion, y verifica idioma y speaker antes de lanzar codificacion para mejorar precision analitica.",
+    "technical_exports": "Puedes exportar resultados desde el panel de exportacion. Antes de compartir, confirma que la teoria este actualizada y que los claims clave tengan trazabilidad de evidencia.",
+    "technical_troubleshooting": "Si hay fallas: 1) confirma proyecto seleccionado, 2) reintenta la accion, 3) revisa estado de entrevistas y transcripcion, 4) sincroniza cloud. Si persiste, reporta al canal de soporte con hora y accion ejecutada.",
+    "contact": "Contacto empresarial: axial@nubeweb.cl y theogen@nubeweb.cl. Sitio: https://axial.nubeweb.cl. Referente: Osvaldo Vega Oses, Sociologo.",
+    "authenticated_general": "Puedo ayudarte con uso tecnico de TheoGen (entrevistas, codificacion, teoria, trazabilidad y exportes) sin exponer codigo ni datos internos."
+  },
+  "blocked": {
+    "sensitive_request": "No puedo entregar codigo fuente, secretos, credenciales ni datos internos del proyecto. Puedo ayudarte con uso funcional y canales formales de contacto."
+  }
+}

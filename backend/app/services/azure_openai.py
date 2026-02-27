@@ -173,6 +173,9 @@ class FoundryOpenAIService:
     async def claude_analysis(self, messages: list, **kwargs):
         return await self._chat_call(settings.MODEL_CLAUDE_ADVANCED, messages, **kwargs)
 
+    async def assistant_chat(self, model: str, messages: list, **kwargs):
+        return await self._chat_call(model, messages, **kwargs)
+
     async def _chat_call(self, model: str, messages: list, temperature: float = 0.3, **kwargs):
         """Unified async chat completion with capability-aware parameter handling."""
         import asyncio
