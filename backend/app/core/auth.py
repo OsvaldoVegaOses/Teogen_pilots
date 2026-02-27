@@ -16,14 +16,14 @@ Security flow:
 
 import logging
 import time
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .settings import settings
 
@@ -130,6 +130,17 @@ def _find_key(jwks: dict, kid: str) -> Optional[dict]:
     return None
 
 
+def _as_str_list(value: Any) -> list[str]:
+    """Normalizes token claims that may arrive as string or array."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return []
+
+
 # ──────────────────────────────────────────────
 # User Model
 # ──────────────────────────────────────────────
@@ -143,6 +154,8 @@ class CurrentUser(BaseModel):
     name: Optional[str] = None
     preferred_username: Optional[str] = None
     tenant_id: Optional[str] = None
+    roles: list[str] = Field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
 
     @property
     def user_uuid(self) -> UUID:
@@ -160,6 +173,13 @@ class CurrentUser(BaseModel):
                 extra={"raw_user_id": self.oid, "stable_user_uuid": str(stable_uuid)},
             )
             return stable_uuid
+
+    def has_any_role(self, role_names: set[str]) -> bool:
+        expected = {role.strip().lower() for role in role_names if role and role.strip()}
+        if not expected:
+            return False
+        current = {role.strip().lower() for role in self.roles if role and role.strip()}
+        return bool(current.intersection(expected))
 
 
 # ──────────────────────────────────────────────
@@ -258,6 +278,8 @@ async def get_current_user(
                 name=payload.get("name"),
                 preferred_username=payload.get("email"),
                 tenant_id=None,
+                roles=_as_str_list(payload.get("roles")),
+                groups=_as_str_list(payload.get("groups")),
             )
 
         else:
@@ -301,6 +323,8 @@ async def get_current_user(
                 name=payload.get("name"),
                 preferred_username=payload.get("preferred_username"),
                 tenant_id=payload.get("tid"),
+                roles=_as_str_list(payload.get("roles")),
+                groups=_as_str_list(payload.get("groups")),
             )
 
     except JWTError as e:

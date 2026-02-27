@@ -8,6 +8,7 @@ class UserProfileResponse(BaseModel):
     display_name: str
     organization: str | None = None
     updated_at: datetime | None = None
+    can_view_assistant_ops: bool = False
 
     class Config:
         from_attributes = True

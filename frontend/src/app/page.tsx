@@ -119,8 +119,8 @@ export default function Home() {
         <button
           type="button"
           onClick={() => setMobileNavOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
-          aria-label="Cerrar menu"
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[1px] md:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
+          aria-label="Cerrar menú"
         />
       )}
       <header className="fixed top-0 z-50 w-full border-b border-zinc-200/50 bg-zinc-50/80 backdrop-blur-md dark:border-zinc-800/50 dark:bg-zinc-950/80">
@@ -160,13 +160,13 @@ export default function Home() {
         ref={mobileDrawerRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Menu de navegacion movil"
-        className={`fixed right-0 top-0 z-50 h-full w-72 border-l border-zinc-200 bg-white p-6 transition-transform duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-950 md:hidden ${
+        aria-label="Menú de navegación móvil"
+        className={`fixed right-0 top-0 z-[70] h-full w-72 border-l border-zinc-200 bg-white p-6 transition-transform duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-950 md:hidden ${
           mobileNavOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="mb-6 flex items-center justify-between">
-          <span className="text-base font-bold tracking-tight">Navegacion</span>
+          <span className="text-base font-bold tracking-tight">Navegación</span>
           <button
             type="button"
             onClick={() => setMobileNavOpen(false)}
@@ -239,6 +239,9 @@ export default function Home() {
                   <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
                 </svg>
               </div>
+              <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                Sincronización activa de evidencia y señales de entrevistas.
+              </p>
             </div>
           </div>
         </section>
@@ -346,11 +349,11 @@ export default function Home() {
             <a href="https://axial.nubeweb.cl" target="_blank" rel="noopener noreferrer" className="block hover:text-indigo-600">
               axial.nubeweb.cl
             </a>
-            <p>Osvaldo Vega Oses, Sociologo</p>
+            <p>Osvaldo Vega Oses, Sociólogo</p>
           </div>
 
           <div className="flex flex-col gap-2 text-xs text-zinc-600 dark:text-zinc-300 md:items-end">
-            <p>� 2026 TheoGen. Corporate Qualitative Insights Platform.</p>
+            <p>© 2026 TheoGen. Plataforma corporativa de insights cualitativos.</p>
             <div className="flex gap-6">
               <Link href="/resumen" className="text-xs text-zinc-600 hover:text-indigo-600 dark:text-zinc-300">Resumen ejecutivo</Link>
               <Link href="/login" className="text-xs text-zinc-600 hover:text-indigo-600 dark:text-zinc-300">Probar gratis</Link>

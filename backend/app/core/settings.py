@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
     THEORY_USE_CELERY: bool = False
+    ASSISTANT_TENANT_ADMIN_ROLES: str = "admin,ops,tenant_admin,platform_super_admin"
 
     # External managed services
     NEO4J_URI: str

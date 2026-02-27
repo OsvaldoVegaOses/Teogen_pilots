@@ -1,11 +1,33 @@
-@description('Módulo Bicep para crear una Storage Account para static site y blobs')
-param storageAccountName string
+@description('Module to deploy a single Azure Storage account used by TheoGen.')
 param location string = resourceGroup().location
+
+@description('Preferred storage account name.')
+param storageAccountName string = ''
+
+@description('Backward-compatible alias for storageAccountName.')
+param accountName string = ''
+
+@description('Storage SKU name.')
 param skuName string = 'Standard_LRS'
+
+@description('Storage account kind.')
 param kind string = 'StorageV2'
 
-resource sa 'Microsoft.Storage/storageAccounts@2022-09-01' = {
-  name: storageAccountName
+@description('Enable static website on blob service.')
+param enableStaticWebsite bool = false
+
+@description('Blob containers to create.')
+param blobContainerNames array = [
+  'theogen-audio'
+  'theogen-documents'
+  'theogen-exports'
+  'theogen-backups'
+]
+
+var effectiveStorageAccountName = !empty(storageAccountName) ? storageAccountName : accountName
+
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: effectiveStorageAccountName
   location: location
   sku: {
     name: skuName
@@ -13,23 +35,6 @@ resource sa 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   kind: kind
   properties: {
     accessTier: 'Hot'
-  }
-}
-
-output storageAccountId string = sa.id
-output primaryEndpoints object = sa.properties.primaryEndpoints
-// infra/modules/storage.bicep
-param location string
-param accountName string
-
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: accountName
-  location: location
-  kind: 'StorageV2'
-  sku: {
-    name: 'Standard_LRS'
-  }
-  properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     networkAcls: {
@@ -42,22 +47,26 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: {
+    staticWebsite: {
+      enabled: enableStaticWebsite
+      indexDocument: 'index.html'
+      errorDocument404Path: '404.html'
+    }
+  }
 }
 
-resource audioContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: blobService
-  name: 'theogen-audio'
-}
-
-resource docsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: blobService
-  name: 'theogen-documents'
-}
-
-resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: blobService
-  name: 'theogen-exports'
-}
+resource blobContainers 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = [
+  for containerName in blobContainerNames: {
+    parent: blobService
+    name: containerName
+    properties: {
+      publicAccess: 'None'
+    }
+  }
+]
 
 output name string = storage.name
 output id string = storage.id
+output storageAccountId string = storage.id
+output primaryEndpoints object = storage.properties.primaryEndpoints

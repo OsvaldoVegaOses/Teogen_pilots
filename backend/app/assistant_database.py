@@ -3,6 +3,7 @@ from urllib.parse import quote_plus
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from .core.settings import settings
 from .models.assistant_models import AssistantBase
@@ -84,6 +85,25 @@ async def ensure_assistant_schema() -> bool:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(AssistantBase.metadata.create_all)
+            # Backward-compatible schema patching for installations created before tenant scoping.
+            await conn.execute(
+                text("ALTER TABLE assistant_message_logs ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64)")
+            )
+            await conn.execute(
+                text("ALTER TABLE assistant_contact_leads ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64)")
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_assistant_message_logs_tenant_id "
+                    "ON assistant_message_logs (tenant_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_assistant_contact_leads_tenant_id "
+                    "ON assistant_contact_leads (tenant_id)"
+                )
+            )
         _assistant_available = True
         _assistant_initialized = True
         return True

@@ -2,6 +2,14 @@
 # .\git_push.ps1  [-Message "tu mensaje"]  [-DryRun]
 # Sube cambios de código fuente a GitHub respetando .gitignore y
 # bloqueando patrones de archivos peligrosos antes de commitear.
+## Con mensaje automático
+.\git_push.ps1
+
+# Con mensaje personalizado
+.\git_push.ps1 -Message "feat: nueva funcionalidad X"
+
+# Simular sin commitear
+.\git_push.ps1 -DryRun
 
 param(
     [string]$Message = "",

@@ -3,7 +3,7 @@ import { loginRequest } from "./msalConfig";
 import { ensureMsalInitialized } from "./msalInstance";
 import { getGoogleToken } from "./googleAuth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 /**
  * Helper to get the access token silently.

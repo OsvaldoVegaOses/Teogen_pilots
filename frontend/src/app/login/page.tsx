@@ -100,9 +100,9 @@ export default function Login() {
             <span className="text-xl font-bold tracking-tight">TheoGen</span>
           </div>
           <nav className="hidden items-center gap-8 md:flex">
-            <Link href="/#features" className="text-sm font-medium hover:text-indigo-600 transition-colors">Características</Link>
-            <Link href="/#methodology" className="text-sm font-medium hover:text-indigo-600 transition-colors">Metodología</Link>
-            <Link href="/#pricing" className="text-sm font-medium hover:text-indigo-600 transition-colors">Precios</Link>
+            <Link href="/#valor" className="text-sm font-medium hover:text-indigo-600 transition-colors">Valor</Link>
+            <Link href="/#como-funciona" className="text-sm font-medium hover:text-indigo-600 transition-colors">Cómo funciona</Link>
+            <Link href="/#industrias" className="text-sm font-medium hover:text-indigo-600 transition-colors">Industrias</Link>
           </nav>
           <div className="flex items-center gap-4">
             {/* Empty right side in login page to focus on task */}

@@ -177,6 +177,7 @@ export default function Dashboard() {
                     email?: string | null;
                     display_name: string;
                     organization?: string | null;
+                    can_view_assistant_ops?: boolean;
                 };
                 if (cancelled) return;
                 const nextProfile: SessionProfile = {
@@ -186,6 +187,7 @@ export default function Dashboard() {
                     organization: payload.organization || "",
                 };
                 setSessionProfile(nextProfile);
+                setCanViewAssistantOps(Boolean(payload.can_view_assistant_ops));
                 setProfileForm({
                     displayName: nextProfile.displayName,
                     organization: nextProfile.organization,
@@ -217,6 +219,13 @@ export default function Dashboard() {
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+    const [canViewAssistantOps, setCanViewAssistantOps] = useState(false);
+
+    useEffect(() => {
+        if (!canViewAssistantOps && activeTab === "assistant_ops") {
+            setActiveTab("overview");
+        }
+    }, [canViewAssistantOps, activeTab]);
 
     // Interviews tab state
     const [interviews, setInterviews] = useState<InterviewSummary[]>([]);
@@ -896,12 +905,14 @@ export default function Dashboard() {
                     >
                         Memos
                     </button>
-                                    <button
-                        onClick={() => setActiveTab("assistant_ops")}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
-                    >
-                        Assistant Ops
-                    </button>
+                    {canViewAssistantOps && (
+                        <button
+                            onClick={() => setActiveTab("assistant_ops")}
+                            className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
+                        >
+                            Assistant Ops
+                        </button>
+                    )}
                 </nav>
             </aside>
 
@@ -971,15 +982,17 @@ export default function Dashboard() {
                     >
                         Memos
                     </button>
-                    <button
-                        onClick={() => {
-                            setActiveTab("assistant_ops");
-                            setMobileNavOpen(false);
-                        }}
-                        className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
-                    >
-                        Assistant Ops
-                    </button>
+                    {canViewAssistantOps && (
+                        <button
+                            onClick={() => {
+                                setActiveTab("assistant_ops");
+                                setMobileNavOpen(false);
+                            }}
+                            className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'assistant_ops' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'}`}
+                        >
+                            Assistant Ops
+                        </button>
+                    )}
                 </nav>
             </aside>
 
@@ -1004,7 +1017,7 @@ export default function Dashboard() {
                                 {activeTab === "codes" && "Exploración de Conceptos"}
                                 {activeTab === "interviews" && "Entrevistas"}
                                 {activeTab === "memos" && "Memos Analiticos"}
-                                {activeTab === "assistant_ops" && "Operaciones del Asistente"}
+                                {activeTab === "assistant_ops" && canViewAssistantOps && "Operaciones del Asistente"}
                             </h1>
                         </div>
                         <div className="flex w-full flex-wrap items-center justify-start gap-2 md:w-auto md:justify-end md:gap-3">
@@ -1434,7 +1447,7 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {activeTab === "assistant_ops" && <AssistantOpsPanel />}
+                    {activeTab === "assistant_ops" && canViewAssistantOps && <AssistantOpsPanel />}
                 </div>
             </main>
 

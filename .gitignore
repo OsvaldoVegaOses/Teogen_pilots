@@ -74,6 +74,7 @@ temp_fqdn.txt
 # ── GitHub Workflows (no auto-deploy) ────────────────────────────────────────
 .github/workflows/*.yml
 .github/workflows/*.yaml
+!.github/workflows/ci.yml
 
 # ── VS Code ───────────────────────────────────────────────────────────────────
 .vscode/settings.json

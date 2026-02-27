@@ -30,6 +30,7 @@ module storageModule '../modules/storage.bicep' = {
     location: location
     skuName: 'Standard_LRS'
     kind: 'StorageV2'
+    enableStaticWebsite: true
   }
 }
 

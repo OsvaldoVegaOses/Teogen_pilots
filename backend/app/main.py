@@ -69,23 +69,20 @@ app = FastAPI(
 )
 
 # CORS context
-# Define allowed origins specifically, avoiding "*" in production if possible
+# Endurecido: solo lista explícita, sin regex abierto
 origins = [
     settings.FRONTEND_URL,
     "https://theogen.nubeweb.cl",
-    "http://localhost:3000",
     "https://theogenfrontwpdxe2pv.z13.web.core.windows.net",
-    "https://theogenfrontpllrx4ji.z13.web.core.windows.net", # URL actual del usuario
+    "https://theogenfrontpllrx4ji.z13.web.core.windows.net",
     "https://theogen-app.whitepebble-c2a4715b.eastus.azurecontainerapps.io",
     "https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io"
 ]
-# Clean up empty strings or duplicates
 origins = list(set([o for o in origins if o]))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.z13\.web\.core\.windows\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

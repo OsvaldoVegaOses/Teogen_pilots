@@ -25,6 +25,41 @@ param enableIngress bool = false
 param ingressExternal bool = false
 param targetPort int = 8000
 
+var keyVaultSecretItems = [for s in keyVaultSecrets: {
+  name: s.name
+  keyVaultUrl: s.keyVaultSecretId
+  identity: 'system'
+}]
+
+var inlineSecretItems = [for s in inlineSecrets: {
+  name: s.name
+  value: s.value
+}]
+
+var resolvedSecrets = concat(keyVaultSecretItems, inlineSecretItems)
+
+var registryItems = [for r in registries: union(
+  { server: r.server },
+  contains(r, 'identity') ? { identity: r.identity } : { username: r.username, passwordSecretRef: r.passwordSecretRef }
+)]
+
+var keyVaultEnvItems = [for s in keyVaultSecrets: {
+  name: s.name
+  secretRef: s.name
+}]
+
+var inlineSecretEnvItems = [for s in inlineSecrets: {
+  name: s.name
+  secretRef: s.name
+}]
+
+var additionalEnvItems = [for e in additionalEnv: {
+  name: e.name
+  value: e.value
+}]
+
+var resolvedEnv = concat(keyVaultEnvItems, inlineSecretEnvItems, additionalEnvItems)
+
 resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
   name: containerAppName
   location: location
@@ -35,21 +70,8 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
     managedEnvironmentId: managedEnvironmentId
     configuration: {
       // Key Vault-backed secrets are resolved by the app managed identity.
-      secrets: concat(
-        [for s in keyVaultSecrets: {
-          name: s.name
-          keyVaultUrl: s.keyVaultSecretId
-          identity: 'system'
-        }],
-        [for s in inlineSecrets: {
-          name: s.name
-          value: s.value
-        }]
-      )
-      registries: [for r in registries: union(
-        { server: r.server },
-        contains(r, 'identity') ? { identity: r.identity } : { username: r.username, passwordSecretRef: r.passwordSecretRef }
-      )]
+      secrets: resolvedSecrets
+      registries: registryItems
       ingress: enableIngress ? {
         external: ingressExternal
         targetPort: targetPort
@@ -67,20 +89,7 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             cpu: cpu
             memory: memory
           }
-          env: concat(
-            [for s in keyVaultSecrets: {
-              name: s.name
-              secretRef: s.name
-            }],
-            [for s in inlineSecrets: {
-              name: s.name
-              secretRef: s.name
-            }],
-            [for e in additionalEnv: {
-              name: e.name
-              value: e.value
-            }]
-          )
+          env: resolvedEnv
         }
       ]
       scale: {

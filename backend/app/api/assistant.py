@@ -59,6 +59,18 @@ _public_llm_fallback_store: dict[str, int] = {}
 _redis_assistant = None
 
 
+def _assistant_tenant_admin_roles() -> set[str]:
+    return {
+        role.strip().lower()
+        for role in (settings.ASSISTANT_TENANT_ADMIN_ROLES or "").split(",")
+        if role and role.strip()
+    }
+
+
+def _can_view_tenant_ops(user: CurrentUser) -> bool:
+    return bool(user.tenant_id) and user.has_any_role(_assistant_tenant_admin_roles())
+
+
 async def _get_redis_assistant():
     """Lazy Redis client reutilizable; devuelve None si no está configurado."""
     global _redis_assistant
@@ -283,6 +295,7 @@ async def _persist_chat_log(
         log_entry = AssistantMessageLog(
             session_id=session_id,
             mode=mode,
+            tenant_id=(user.tenant_id if user else None),
             user_id=(user.user_uuid if user else None),
             user_message=user_message.strip(),
             assistant_reply=assistant_reply,
@@ -412,6 +425,7 @@ async def create_public_lead(
     lead = AssistantContactLead(
         session_id=payload.session_id,
         source_mode="authenticated_public" if user else "public",
+        tenant_id=(user.tenant_id if user else None),
         user_id=(user.user_uuid if user else None),
         name=payload.name.strip(),
         email=payload.email.strip(),
@@ -434,7 +448,7 @@ async def create_public_lead(
 
 @router.get("/authenticated/metrics", response_model=AssistantMetricsResponse)
 async def get_authenticated_metrics(
-    _user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
     assistant_db: AsyncSession | None = Depends(get_assistant_db),
 ):
     logging_enabled = await ensure_assistant_schema()
@@ -447,19 +461,48 @@ async def get_authenticated_metrics(
         )
 
     since = datetime.utcnow() - timedelta(days=7)
+    tenant_scope = _can_view_tenant_ops(user)
 
-    total_messages_result = await assistant_db.execute(
-        select(func.count(AssistantMessageLog.id)).where(AssistantMessageLog.created_at >= since)
-    )
-    blocked_messages_result = await assistant_db.execute(
-        select(func.count(AssistantMessageLog.id)).where(
-            AssistantMessageLog.created_at >= since,
-            AssistantMessageLog.blocked.is_(True),
+    if tenant_scope:
+        total_messages_result = await assistant_db.execute(
+            select(func.count(AssistantMessageLog.id)).where(
+                AssistantMessageLog.created_at >= since,
+                AssistantMessageLog.tenant_id == user.tenant_id,
+            )
         )
-    )
-    leads_result = await assistant_db.execute(
-        select(func.count(AssistantContactLead.id)).where(AssistantContactLead.created_at >= since)
-    )
+        blocked_messages_result = await assistant_db.execute(
+            select(func.count(AssistantMessageLog.id)).where(
+                AssistantMessageLog.created_at >= since,
+                AssistantMessageLog.tenant_id == user.tenant_id,
+                AssistantMessageLog.blocked.is_(True),
+            )
+        )
+        leads_result = await assistant_db.execute(
+            select(func.count(AssistantContactLead.id)).where(
+                AssistantContactLead.created_at >= since,
+                AssistantContactLead.tenant_id == user.tenant_id,
+            )
+        )
+    else:
+        total_messages_result = await assistant_db.execute(
+            select(func.count(AssistantMessageLog.id)).where(
+                AssistantMessageLog.created_at >= since,
+                AssistantMessageLog.user_id == user.user_uuid,
+            )
+        )
+        blocked_messages_result = await assistant_db.execute(
+            select(func.count(AssistantMessageLog.id)).where(
+                AssistantMessageLog.created_at >= since,
+                AssistantMessageLog.user_id == user.user_uuid,
+                AssistantMessageLog.blocked.is_(True),
+            )
+        )
+        leads_result = await assistant_db.execute(
+            select(func.count(AssistantContactLead.id)).where(
+                AssistantContactLead.created_at >= since,
+                AssistantContactLead.user_id == user.user_uuid,
+            )
+        )
 
     return AssistantMetricsResponse(
         logging_enabled=True,
@@ -471,18 +514,27 @@ async def get_authenticated_metrics(
 
 @router.get("/authenticated/ops", response_model=AssistantOpsResponse)
 async def get_authenticated_ops(
-    _user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
     assistant_db: AsyncSession | None = Depends(get_assistant_db),
 ):
+    if not _can_view_tenant_ops(user):
+        raise HTTPException(status_code=403, detail="Assistant ops requires tenant admin role")
+
     logging_enabled = await ensure_assistant_schema()
     if not logging_enabled or assistant_db is None:
         return AssistantOpsResponse(logging_enabled=False, recent_messages=[], recent_leads=[])
 
     messages_result = await assistant_db.execute(
-        select(AssistantMessageLog).order_by(AssistantMessageLog.created_at.desc()).limit(20)
+        select(AssistantMessageLog)
+        .where(AssistantMessageLog.tenant_id == user.tenant_id)
+        .order_by(AssistantMessageLog.created_at.desc())
+        .limit(20)
     )
     leads_result = await assistant_db.execute(
-        select(AssistantContactLead).order_by(AssistantContactLead.created_at.desc()).limit(20)
+        select(AssistantContactLead)
+        .where(AssistantContactLead.tenant_id == user.tenant_id)
+        .order_by(AssistantContactLead.created_at.desc())
+        .limit(20)
     )
 
     recent_messages = [

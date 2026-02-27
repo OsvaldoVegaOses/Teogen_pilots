@@ -1,7 +1,9 @@
 "use client";
 
 import { useMsal } from "@azure/msal-react";
+import { GoogleLogin } from "@react-oauth/google";
 import { loginRequest } from "@/lib/msalConfig";
+import { setGoogleToken, getGoogleToken } from "@/lib/googleAuth";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -20,23 +22,31 @@ export default function Signup() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const segmentKey = (searchParams.get("segment") || "").toLowerCase();
   const segmentLabel = SEGMENT_LABELS[segmentKey] || null;
 
   useEffect(() => {
-    if (accounts.length > 0) {
+    if (accounts.length > 0 || getGoogleToken()) {
       router.push(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
     }
   }, [accounts, router, segmentKey]);
 
   const handleSignup = async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       await instance.loginRedirect(loginRequest);
     } catch (e) {
       console.error(e);
+      setAuthError(e instanceof Error ? e.message : "Error al crear cuenta. Intenta nuevamente.");
       setIsLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = (credential: string): void => {
+    setGoogleToken(credential);
+    router.push(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
   };
 
   return (
@@ -50,9 +60,9 @@ export default function Signup() {
             <span className="text-xl font-bold tracking-tight">TheoGen</span>
           </div>
           <nav className="hidden items-center gap-8 md:flex">
-            <Link href="/#features" className="text-sm font-medium hover:text-indigo-600 transition-colors">Características</Link>
-            <Link href="/#methodology" className="text-sm font-medium hover:text-indigo-600 transition-colors">Metodología</Link>
-            <Link href="/#pricing" className="text-sm font-medium hover:text-indigo-600 transition-colors">Precios</Link>
+            <Link href="/#valor" className="text-sm font-medium hover:text-indigo-600 transition-colors">Valor</Link>
+            <Link href="/#como-funciona" className="text-sm font-medium hover:text-indigo-600 transition-colors">Cómo funciona</Link>
+            <Link href="/#industrias" className="text-sm font-medium hover:text-indigo-600 transition-colors">Industrias</Link>
           </nav>
           <div className="flex items-center gap-4">
             {/* Empty right side in signup page */}
@@ -64,13 +74,19 @@ export default function Signup() {
         <div className="w-full max-w-md space-y-8 p-8 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight">Crear Cuenta</h2>
-            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Prueba TheoGen gratis usando tu cuenta de Microsoft.</p>
+            <p className="mt-2 text-zinc-600 dark:text-zinc-400">Prueba TheoGen gratis usando tu cuenta de Microsoft o Google.</p>
             {segmentLabel && (
               <p className="mt-3 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-900/70 dark:bg-indigo-950/40 dark:text-indigo-300">
                 Segmento seleccionado: {segmentLabel}
               </p>
             )}
           </div>
+
+          {authError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+              <p className="text-sm text-red-700 dark:text-red-400">{authError}</p>
+            </div>
+          )}
 
           <div className="mt-8 space-y-6">
             <button
@@ -85,6 +101,24 @@ export default function Signup() {
               </span>
               {isLoading ? "Redirigiendo..." : "Registrarse con Microsoft"}
             </button>
+
+            <div className="flex w-full justify-center">
+              <GoogleLogin
+                onSuccess={(cr) => {
+                  if (cr.credential) {
+                    handleGoogleSuccess(cr.credential);
+                  } else {
+                    setAuthError("No se recibió el token de Google.");
+                  }
+                }}
+                onError={() => setAuthError("Error al crear cuenta con Google. Intenta de nuevo.")}
+                theme="outline"
+                size="large"
+                text="continue_with"
+                shape="rectangular"
+                width={320}
+              />
+            </div>
 
             <div className="mt-6">
               <div className="relative">

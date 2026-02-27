@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { publicApiClient } from "@/lib/api";
 
 type ChatMessage = {
@@ -39,7 +39,7 @@ function buildFallbackReply(input: string): string {
   }
 
   if (q.includes("contacto") || q.includes("email") || q.includes("correo") || q.includes("comercial")) {
-    return "Contacto empresarial: axial@nubeweb.cl y theogen@nubeweb.cl. Sitio: https://axial.nubeweb.cl. Referente: Osvaldo Vega Oses, Sociologo.";
+    return "Contacto empresarial: axial@nubeweb.cl y theogen@nubeweb.cl. Sitio: https://axial.nubeweb.cl. Referente: Osvaldo Vega Oses, Sociólogo.";
   }
 
   if (q.includes("que es") || q.includes("theogen") || q.includes("plataforma")) {
@@ -65,6 +65,16 @@ function buildFallbackReply(input: string): string {
   return "Puedo ayudarte con informacion publica de la landing: propuesta de valor, segmentos, forma de uso y contacto comercial. Si quieres, pregunta por 'contacto', 'como funciona' o 'industrias'.";
 }
 
+function renderSimpleMarkdown(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={`md-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={`md-${index}`}>{part}</span>;
+  });
+}
+
 export default function LandingChatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -76,6 +86,7 @@ export default function LandingChatbot() {
   const [leadConsent, setLeadConsent] = useState(false);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
   const [leadSending, setLeadSending] = useState(false);
+  const [usedQuickPrompts, setUsedQuickPrompts] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -148,6 +159,7 @@ export default function LandingChatbot() {
   async function sendQuickPrompt(prompt: string) {
     if (isSending) return;
     setIsOpen(true);
+    setUsedQuickPrompts((prev) => (prev.includes(prompt) ? prev : [...prev, prompt]));
     await askAssistant(prompt);
   }
 
@@ -191,9 +203,9 @@ export default function LandingChatbot() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[60]">
+    <div className="fixed bottom-4 right-4 z-[70] sm:bottom-5 sm:right-5">
       {isOpen ? (
-        <div className="w-[min(92vw,340px)] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="w-[min(94vw,360px)] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
           <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <div>
               <p className="text-sm font-semibold">Asistente virtual</p>
@@ -209,17 +221,17 @@ export default function LandingChatbot() {
             </button>
           </div>
 
-          <div className="max-h-[360px] space-y-3 overflow-y-auto px-4 py-3">
+          <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-3">
             {messages.map((m) => (
               <div key={m.id} className={m.role === "assistant" ? "text-left" : "text-right"}>
                 <p
                   className={
                     m.role === "assistant"
-                      ? "inline-block max-w-[88%] rounded-xl bg-zinc-100 px-3 py-2 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-                      : "inline-block max-w-[88%] rounded-xl bg-indigo-600 px-3 py-2 text-xs text-white"
+                      ? "inline-block max-w-[92%] break-words whitespace-pre-wrap rounded-xl bg-zinc-100 px-3 py-2 text-xs leading-relaxed text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                      : "inline-block max-w-[92%] break-words whitespace-pre-wrap rounded-xl bg-indigo-600 px-3 py-2 text-xs leading-relaxed text-white"
                   }
                 >
-                  {m.text}
+                  {renderSimpleMarkdown(m.text)}
                 </p>
               </div>
             ))}
@@ -227,7 +239,7 @@ export default function LandingChatbot() {
 
           <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <div className="mb-3 flex flex-wrap gap-2">
-              {quickPrompts.map((p) => (
+              {quickPrompts.filter((p) => !usedQuickPrompts.includes(p)).map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -245,6 +257,8 @@ export default function LandingChatbot() {
                 value={leadName}
                 onChange={(e) => setLeadName(e.target.value)}
                 required
+                onInvalid={(e) => e.currentTarget.setCustomValidity("Ingresa tu nombre.")}
+                onInput={(e) => e.currentTarget.setCustomValidity("")}
                 placeholder="Nombre"
                 className="w-full rounded border border-zinc-300 px-2 py-1.5 text-[11px] dark:border-zinc-700 dark:bg-zinc-950"
               />
@@ -253,6 +267,8 @@ export default function LandingChatbot() {
                 onChange={(e) => setLeadEmail(e.target.value)}
                 required
                 type="email"
+                onInvalid={(e) => e.currentTarget.setCustomValidity("Ingresa un correo electrónico válido.")}
+                onInput={(e) => e.currentTarget.setCustomValidity("")}
                 placeholder="Email"
                 className="w-full rounded border border-zinc-300 px-2 py-1.5 text-[11px] dark:border-zinc-700 dark:bg-zinc-950"
               />
@@ -297,10 +313,22 @@ export default function LandingChatbot() {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="rounded-full bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-indigo-700"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-indigo-700 sm:h-auto sm:w-auto sm:px-4 sm:py-3"
           aria-label="Abrir asistente virtual"
         >
-          Asistente virtual
+          <svg
+            className="h-5 w-5 sm:hidden"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+          </svg>
+          <span className="sr-only sm:not-sr-only">Asistente virtual</span>
         </button>
       )}
     </div>

@@ -62,15 +62,21 @@ if ($LASTEXITCODE -ne 0) {
 
 # 2. Forzar nueva revisión con suffix único (evita que ACA ignore el mismo tag :latest)
 $revisionSuffix = "deploy-$(Get-Date -Format 'yyMMdd-HHmm')"
+
 Write-Host "`n[2/2] Creando nueva revisión: $revisionSuffix ..." -ForegroundColor Yellow
 
-# az containerapp update devuelve exit code 1 por warnings de progreso en stderr aunque haya éxito.
-# Se omite --output none para que errores reales (auth, imagen incorrecta) sean visibles en consola.
+# Declarar probes (startup/readiness/liveness) en Container App
+$startupProbe = @{ "type" = "Startup"; "httpGet" = @{ "path" = "/health"; "port" = 8000 }; "initialDelaySeconds" = 5; "periodSeconds" = 10; "failureThreshold" = 6 }
+$readinessProbe = @{ "type" = "Readiness"; "httpGet" = @{ "path" = "/health"; "port" = 8000 }; "initialDelaySeconds" = 5; "periodSeconds" = 10; "failureThreshold" = 3 }
+$livenessProbe = @{ "type" = "Liveness"; "httpGet" = @{ "path" = "/health"; "port" = 8000 }; "initialDelaySeconds" = 10; "periodSeconds" = 20; "failureThreshold" = 3 }
+$probesJson = @($startupProbe, $readinessProbe, $livenessProbe) | ConvertTo-Json -Compress
+
 az containerapp update `
     --name $containerAppName `
     --resource-group $resourceGroup `
     --image "$($acrName).azurecr.io/$imageName" `
-    --revision-suffix $revisionSuffix
+    --revision-suffix $revisionSuffix `
+    --set-template-probes "$probesJson"
 
 # Esperar a que ACA complete el aprovisionamiento (puede tardar entre 30 y 120 s)
 $maxWait = 120

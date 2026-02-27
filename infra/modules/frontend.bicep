@@ -81,4 +81,4 @@ resource cdnEndpoint 'Microsoft.Cdn/profiles/endpoints@2021-06-01' = {
   }
 }
 
-output cdnEndpointUrl string = 'https://${cdnEndpoint.hostName}'
+output cdnEndpointUrl string = 'https://${cdnEndpoint.properties.hostName}'
