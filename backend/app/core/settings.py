@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     AZURE_PG_PASSWORD: str = ""
     AZURE_PG_HOST: str = ""
     AZURE_PG_DATABASE: str = "theogen"
+    ASSISTANT_PG_DATABASE: str = "theogen_assistant"
+    ASSISTANT_DATABASE_URL: str = ""
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
@@ -158,6 +160,9 @@ class Settings(BaseSettings):
     # Azure AD (Entra ID)
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
+
+    # Google Identity Services
+    GOOGLE_CLIENT_ID: str = ""
 
     @model_validator(mode="after")
     def validate_required_integrations(self):

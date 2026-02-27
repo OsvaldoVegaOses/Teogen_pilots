@@ -1,6 +1,7 @@
 "use client";
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
+import { getGoogleToken } from "@/lib/googleAuth";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import InterviewUpload from "@/components/InterviewUpload";
@@ -10,6 +11,7 @@ import TheoryViewer from "@/components/TheoryViewer";
 import type { Theory as TheoryViewerTheory } from "@/components/TheoryViewer";
 import InterviewModal from "@/components/InterviewModal";
 import ExportPanel, { enqueueLocalExport } from "@/components/ExportPanel";
+import AuthenticatedChatbot from "@/components/assistant/AuthenticatedChatbot";
 
 const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
 type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
@@ -122,15 +124,21 @@ function isDashboardTab(value: string): value is DashboardTab {
 
 export default function Dashboard() {
     const { inProgress } = useMsal();
-    const isAuthenticated = useIsAuthenticated();
+    const msalIsAuthenticated = useIsAuthenticated();
+    const [googleAuth, setGoogleAuth] = useState(false);
+    const isAuthenticated = msalIsAuthenticated || googleAuth;
     const router = useRouter();
     const searchParams = useSearchParams();
     const segmentKey = (searchParams.get("segment") || "").toLowerCase();
     const segmentPreset = SEGMENT_PRESETS[segmentKey] || null;
 
     useEffect(() => {
-        // Only redirect if MSAL is done processing and user is not authenticated
-        if (inProgress === "none" && !isAuthenticated) {
+        setGoogleAuth(!!getGoogleToken());
+    }, []);
+
+    useEffect(() => {
+        // Only redirect if MSAL is done processing, no MSAL account, and no Google token
+        if (inProgress === "none" && !isAuthenticated && !getGoogleToken()) {
             console.log("[Dashboard] Not authenticated, redirecting to /login/");
             router.replace("/login/");
         }
@@ -1234,6 +1242,7 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
+            <AuthenticatedChatbot />
         </div>
     );
 }

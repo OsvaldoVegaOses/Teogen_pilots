@@ -1,6 +1,7 @@
 /** TheoGen Frontend - Deployment Trigger **/
 import { loginRequest } from "./msalConfig";
 import { ensureMsalInitialized } from "./msalInstance";
+import { getGoogleToken } from "./googleAuth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -26,6 +27,12 @@ function isJwtExpired(token: string, skewSeconds = 60): boolean {
 }
 
 async function getAccessToken(forceRefresh = false): Promise<string | null> {
+    // Check for Google id_token first (Google-authenticated users have no MSAL account)
+    if (!forceRefresh) {
+        const googleToken = getGoogleToken();
+        if (googleToken) return googleToken;
+    }
+
     const instance = await ensureMsalInitialized();
     const accounts = instance.getAllAccounts();
 
@@ -133,6 +140,34 @@ export async function apiClient(endpoint: string, options: RequestInit = {}): Pr
         return response;
     } catch (error) {
         console.error("API Request Failed:", error);
+        throw error;
+    }
+}
+
+/**
+ * Public API client (no auth required).
+ * Useful for landing features accessible before login.
+ */
+export async function publicApiClient(endpoint: string, options: RequestInit = {}): Promise<Response> {
+    const headers: Record<string, string> = {
+        ...(options.headers as Record<string, string>),
+    };
+
+    if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+    }
+
+    const path = endpoint.startsWith("/") ? endpoint : "/" + endpoint;
+    const url = `${API_BASE_URL}${path}`;
+
+    try {
+        return await fetch(url, {
+            ...options,
+            headers,
+            cache: options.cache ?? "no-store",
+        });
+    } catch (error) {
+        console.error("Public API Request Failed:", error);
         throw error;
     }
 }

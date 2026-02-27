@@ -1,17 +1,17 @@
 """
-Azure AD (Entra ID) JWT Token Validation for FastAPI.
+Multi-provider JWT Token Validation for FastAPI.
 
-This module provides:
-- JWKS (JSON Web Key Set) based token validation
-- Automatic key caching and refresh
-- FastAPI dependency injection for protected routes
-- User identity extraction from validated tokens
+Supported identity providers:
+- Azure AD (Entra ID): organizational accounts
+- Microsoft Personal Accounts (MSA): hotmail/outlook/live
+- Google Identity Services: Google accounts via direct id_token
 
 Security flow:
-1. Frontend obtains an ID token via MSAL loginRedirect
-2. Frontend sends it as `Authorization: Bearer <token>` 
-3. This module validates the token signature against Azure AD's public keys
-4. Extracts user identity (oid, email, name) for data isolation
+1. Frontend obtains an ID token from the provider
+2. Frontend sends it as `Authorization: Bearer <token>`
+3. This module inspects the unverified `iss` claim to route to the correct validator
+4. Validates the token signature against the provider's public JWKS
+5. Extracts user identity (oid/sub, email, name) for data isolation
 """
 
 import logging
@@ -44,6 +44,11 @@ ISSUER_V1 = f"https://sts.windows.net/{TENANT_ID}/"
 ISSUER_V2 = f"https://login.microsoftonline.com/{TENANT_ID}/v2.0"
 # Personal Microsoft Account (MSA) tokens are issued by the consumers tenant (fixed ID)
 MSA_ISSUER_V2 = "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
+
+# Google Identity Services endpoints
+GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUER = "https://accounts.google.com"
 
 # ──────────────────────────────────────────────
 # JWKS Key Cache
@@ -79,6 +84,38 @@ async def _get_signing_keys() -> dict:
             # Return stale cache rather than failing completely
             logger.warning("Using stale JWKS cache")
             return _jwks_cache
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to validate authentication keys",
+        )
+
+
+# ── Google JWKS cache ──
+_google_jwks_cache: Optional[dict] = None
+_google_jwks_cache_timestamp: float = 0
+
+
+async def _get_google_signing_keys() -> dict:
+    """Fetch and cache Google's public signing keys (JWKS)."""
+    global _google_jwks_cache, _google_jwks_cache_timestamp
+
+    now = time.time()
+    if _google_jwks_cache and (now - _google_jwks_cache_timestamp) < JWKS_CACHE_DURATION:
+        return _google_jwks_cache
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(GOOGLE_JWKS_URL, timeout=10)
+            response.raise_for_status()
+            _google_jwks_cache = response.json()
+            _google_jwks_cache_timestamp = now
+            logger.info("JWKS keys refreshed from Google")
+            return _google_jwks_cache
+    except Exception as e:
+        logger.error(f"Failed to fetch Google JWKS keys: {e}")
+        if _google_jwks_cache:
+            logger.warning("Using stale Google JWKS cache")
+            return _google_jwks_cache
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to validate authentication keys",
@@ -172,50 +209,99 @@ async def get_current_user(
                 detail="Token header missing key ID (kid)",
             )
 
-        # 2. Fetch the matching signing key from Azure AD
-        jwks = await _get_signing_keys()
-        signing_key = _find_key(jwks, kid)
+        # 2. Peek at the issuer claim (unverified) to route to the correct provider
+        unverified_claims = jwt.get_unverified_claims(token)
+        token_issuer = unverified_claims.get("iss", "")
 
-        if not signing_key:
-            # Key not found — maybe keys rotated? Force refresh and retry
-            global _jwks_cache_timestamp
-            _jwks_cache_timestamp = 0
+        if token_issuer == GOOGLE_ISSUER:
+            # ── Google Identity Services path ──
+            if not GOOGLE_CLIENT_ID:
+                logger.warning("Google token received but GOOGLE_CLIENT_ID not configured")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google authentication not configured on server",
+                )
+
+            google_jwks = await _get_google_signing_keys()
+            signing_key = _find_key(google_jwks, kid)
+
+            if not signing_key:
+                global _google_jwks_cache_timestamp
+                _google_jwks_cache_timestamp = 0
+                google_jwks = await _get_google_signing_keys()
+                signing_key = _find_key(google_jwks, kid)
+                if not signing_key:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token signing key not recognized",
+                    )
+
+            payload = jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                audience=GOOGLE_CLIENT_ID,
+                issuer=GOOGLE_ISSUER,
+                options={"verify_at_hash": False},
+            )
+
+            oid = payload.get("sub")
+            if not oid:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token missing user identifier (sub)",
+                )
+
+            return CurrentUser(
+                oid=oid,
+                email=payload.get("email"),
+                name=payload.get("name"),
+                preferred_username=payload.get("email"),
+                tenant_id=None,
+            )
+
+        else:
+            # ── Azure AD / MSA path ──
             jwks = await _get_signing_keys()
             signing_key = _find_key(jwks, kid)
 
             if not signing_key:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token signing key not recognized",
-                )
+                global _jwks_cache_timestamp
+                _jwks_cache_timestamp = 0
+                jwks = await _get_signing_keys()
+                signing_key = _find_key(jwks, kid)
 
-        # 3. Validate the token signature, expiration, audience, and issuer
-        payload = jwt.decode(
-            token,
-            signing_key,
-            algorithms=["RS256"],
-            audience=CLIENT_ID,
-            issuer=[ISSUER_V1, ISSUER_V2, MSA_ISSUER_V2],
-            options={
-                "verify_at_hash": False,  # ID tokens from SPA may not include at_hash
-            },
-        )
+                if not signing_key:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token signing key not recognized",
+                    )
 
-        # 4. Extract user identity from claims
-        oid = payload.get("oid") or payload.get("sub")
-        if not oid:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing user identifier (oid/sub)",
+            payload = jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                audience=CLIENT_ID,
+                issuer=[ISSUER_V1, ISSUER_V2, MSA_ISSUER_V2],
+                options={
+                    "verify_at_hash": False,  # ID tokens from SPA may not include at_hash
+                },
             )
 
-        return CurrentUser(
-            oid=oid,
-            email=payload.get("email") or payload.get("preferred_username"),
-            name=payload.get("name"),
-            preferred_username=payload.get("preferred_username"),
-            tenant_id=payload.get("tid"),
-        )
+            oid = payload.get("oid") or payload.get("sub")
+            if not oid:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token missing user identifier (oid/sub)",
+                )
+
+            return CurrentUser(
+                oid=oid,
+                email=payload.get("email") or payload.get("preferred_username"),
+                name=payload.get("name"),
+                preferred_username=payload.get("preferred_username"),
+                tenant_id=payload.get("tid"),
+            )
 
     except JWTError as e:
         logger.warning(f"JWT validation failed: {e}")

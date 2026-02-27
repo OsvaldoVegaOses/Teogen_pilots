@@ -1,7 +1,9 @@
 "use client";
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
-import { loginRequest, googleLoginRequest } from "@/lib/msalConfig";
+import { GoogleLogin } from "@react-oauth/google";
+import { loginRequest } from "@/lib/msalConfig";
+import { setGoogleToken, getGoogleToken } from "@/lib/googleAuth";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -35,10 +37,14 @@ export default function Login() {
       return;
     }
 
-    // If the user is authenticated, redirect to dashboard
+    // Redirect if authenticated via MSAL or Google
+    const destination = segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/";
     if (isAuthenticated && accounts.length > 0) {
-      console.log("[Login] User is authenticated, redirecting to /dashboard. Account:", accounts[0]?.username);
-      router.replace(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
+      console.log("[Login] MSAL authenticated, redirecting to dashboard.");
+      router.replace(destination);
+    } else if (getGoogleToken()) {
+      console.log("[Login] Google token found, redirecting to dashboard.");
+      router.replace(destination);
     }
   }, [inProgress, isAuthenticated, accounts, router, segmentKey, isProcessingRedirect]);
 
@@ -55,17 +61,10 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    setAuthError(null);
-    try {
-      console.log("[Login] Starting Google loginRedirect...");
-      await instance.loginRedirect(googleLoginRequest);
-    } catch (e: unknown) {
-      console.error("[Login] Google loginRedirect error:", e);
-      setAuthError(e instanceof Error ? e.message : "Error al iniciar sesión con Google.");
-      setIsLoading(false);
-    }
+  const handleGoogleSuccess = (credential: string): void => {
+    console.log("[Login] Google id_token received, storing and redirecting.");
+    setGoogleToken(credential);
+    router.replace(segmentKey ? `/dashboard?segment=${segmentKey}` : "/dashboard/");
   };
 
   // Show loading screen while processing the redirect
@@ -137,19 +136,23 @@ export default function Login() {
               {isLoading ? "Redirigiendo..." : "Iniciar Sesión con Microsoft"}
             </button>
 
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              className="group relative flex w-full items-center justify-center gap-3 rounded-md border border-zinc-300 bg-white py-3 px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed transition-all dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-                <path fill="#4285F4" d="M47.5 24.5c0-1.6-.1-3.2-.4-4.7H24v8.9h13.1c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.4-10.6 7.4-17.4z"/>
-                <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.9-6c-2.1 1.4-4.8 2.3-8 2.3-6.1 0-11.3-4.1-13.2-9.7H2.7v6.2C6.7 42.9 14.8 48 24 48z"/>
-                <path fill="#FBBC05" d="M10.8 28.8c-.5-1.4-.8-2.8-.8-4.3s.3-3 .8-4.3v-6.2H2.7C1 17.4 0 20.6 0 24s1 6.6 2.7 9.1l8.1-4.3z"/>
-                <path fill="#EA4335" d="M24 9.5c3.4 0 6.5 1.2 8.9 3.4l6.6-6.6C35.9 2.4 30.4 0 24 0 14.8 0 6.7 5.1 2.7 12.7l8.1 6.2c2-5.6 7.2-9.4 13.2-9.4z"/>
-              </svg>
-              {isLoading ? "Redirigiendo..." : "Continuar con Google"}
-            </button>
+            <div className="flex justify-center w-full">
+              <GoogleLogin
+                onSuccess={(cr) => {
+                  if (cr.credential) {
+                    handleGoogleSuccess(cr.credential);
+                  } else {
+                    setAuthError("No se recibió el token de Google.");
+                  }
+                }}
+                onError={() => setAuthError("Error al iniciar sesión con Google. Intenta de nuevo.")}
+                theme="outline"
+                size="large"
+                text="continue_with"
+                shape="rectangular"
+                width={400}
+              />
+            </div>
 
             <div className="mt-6">
               <div className="relative">

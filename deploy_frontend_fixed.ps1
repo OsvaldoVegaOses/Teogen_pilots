@@ -105,6 +105,7 @@ if (Test-Path $frontendPath) {
     $env:NEXT_PUBLIC_API_BASE_URL = "https://theogen-backend.gentlemoss-dcba183f.eastus.azurecontainerapps.io/api"
     $env:NEXT_PUBLIC_AZURE_AD_TENANT_ID = "3e151d68-e5ed-4878-932d-251fe1b0eaf1"
     $env:NEXT_PUBLIC_AZURE_AD_CLIENT_ID = "c6d2cf71-dcd2-4400-a8be-9eb8c16b1174"
+    $env:NEXT_PUBLIC_GOOGLE_CLIENT_ID = "791433802772-l7sul60hr03kq7i2u7m32bd6jrn8lalo.apps.googleusercontent.com"
     
     npm run build
     if ($LASTEXITCODE -ne 0) {

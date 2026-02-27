@@ -3,6 +3,7 @@
 import { MsalProvider } from "@azure/msal-react";
 import { EventType, EventMessage, AuthenticationResult } from "@azure/msal-browser";
 import { ensureMsalInitialized, getMsalInstance } from "@/lib/msalInstance";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
 interface ProvidersProps {
@@ -108,9 +109,11 @@ export function Providers({ children }: ProvidersProps) {
     }
 
     return (
-        <MsalProvider instance={getMsalInstance()}>
-            {children}
-        </MsalProvider>
+        <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""}>
+            <MsalProvider instance={getMsalInstance()}>
+                {children}
+            </MsalProvider>
+        </GoogleOAuthProvider>
     );
 }
 
