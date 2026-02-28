@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from uuid import UUID
 from typing import Optional, Tuple
 
@@ -16,6 +17,7 @@ from ..core.settings import settings
 from ..models.models import Code, Fragment, Project, code_fragment_links
 from ..prompts.axial_coding import AXIAL_CODING_SYSTEM_PROMPT, get_coding_user_prompt
 from ..services.azure_openai import foundry_openai
+from ..services.export.privacy import redact_pii_text
 from ..services.neo4j_service import neo4j_service
 from ..services.qdrant_service import qdrant_service
 
@@ -121,7 +123,9 @@ class CodingEngine:
             logger.error("AI coding failed for fragment %s: %s", fragment_id, e)
             return {}
 
-        codes_to_sync: list[tuple[UUID, str]] = []
+        run_id = f"coding_fragment:{fragment_id}"
+        ts_iso = datetime.utcnow().isoformat()
+        code_edges_to_sync: list[dict] = []
         links_to_insert: list[dict] = []
         for raw_code in coding_results.get("extracted_codes", []):
             code_data = _normalize_extracted_code(raw_code)
@@ -132,13 +136,23 @@ class CodingEngine:
                 continue
 
             code_id = await self._get_or_create_code(db, project_id, label, code_data, codes_cache)
-            codes_to_sync.append((code_id, label))
             char_start, char_end = _infer_char_span(fragment_text, code_data.get("evidence_text", ""))
+            confidence = code_data.get("confidence", 1.0)
+            code_edges_to_sync.append(
+                {
+                    "code_id": code_id,
+                    "label": label,
+                    "confidence": confidence,
+                    "source": "ai",
+                    "char_start": char_start,
+                    "char_end": char_end,
+                }
+            )
             links_to_insert.append(
                 {
                     "code_id": code_id,
                     "fragment_id": fragment_id,
-                    "confidence": code_data.get("confidence", 1.0),
+                    "confidence": confidence,
                     "source": "ai",
                     "char_start": char_start,
                     "char_end": char_end,
@@ -150,8 +164,9 @@ class CodingEngine:
                 pg_insert(code_fragment_links).values(links_to_insert).on_conflict_do_nothing()
             )
 
+        redacted_fragment_text = redact_pii_text(fragment_text)
         try:
-            embeddings = await self.ai.generate_embeddings([fragment_text])
+            embeddings = await self.ai.generate_embeddings([redacted_fragment_text])
             if embeddings:
                 await asyncio.wait_for(
                     qdrant_service.upsert_vectors(
@@ -161,9 +176,9 @@ class CodingEngine:
                                 id=str(fragment_id),
                                 vector=embeddings[0],
                                 payload={
-                                    "text": fragment_text,
+                                    "text": redacted_fragment_text,
                                     "project_id": str(project_id),
-                                    "codes": [lbl for _, lbl in codes_to_sync],
+                                    "codes": [str(edge.get("label")) for edge in code_edges_to_sync],
                                 },
                             )
                         ],
@@ -178,16 +193,32 @@ class CodingEngine:
 
         try:
             await asyncio.wait_for(
-                neo4j_service.create_fragment_node(project_id, fragment_id, fragment_text),
+                neo4j_service.create_fragment_node(
+                    project_id,
+                    fragment_id,
+                    redacted_fragment_text,
+                    interview_id=None,
+                ),
                 timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
             )
-            for code_id, label in codes_to_sync:
+            for edge in code_edges_to_sync:
+                code_id = edge["code_id"]
+                label = str(edge.get("label") or "")
                 await asyncio.wait_for(
                     neo4j_service.create_code_node(project_id, code_id, label),
                     timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
                 )
                 await asyncio.wait_for(
-                    neo4j_service.create_code_fragment_relation(code_id, fragment_id),
+                    neo4j_service.create_code_fragment_relation(
+                        code_id,
+                        fragment_id,
+                        confidence=edge.get("confidence"),
+                        source=edge.get("source"),
+                        run_id=run_id,
+                        ts=ts_iso,
+                        char_start=edge.get("char_start"),
+                        char_end=edge.get("char_end"),
+                    ),
                     timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
                 )
         except Exception as e:
@@ -296,10 +327,13 @@ class CodingEngine:
         )
 
         neo4j_pairs: list[tuple[UUID, UUID]] = []
+        neo4j_code_edges: list[dict] = []
         embed_texts: list[str] = []
         embed_frag_ids: list[UUID] = []
         embed_code_labels: list[list[str]] = []
         embed_created_at: list[str | None] = []
+        run_id = f"coding_interview:{interview_id}"
+        ts_iso = datetime.utcnow().isoformat()
 
         for fragment, coding_result in llm_results:
             labels_this_frag: list[str] = []
@@ -320,11 +354,24 @@ class CodingEngine:
                 labels_this_frag.append(label)
                 neo4j_pairs.append((fragment.id, code_id))
                 char_start, char_end = _infer_char_span(fragment.text, code_data.get("evidence_text", ""))
+                confidence = code_data.get("confidence", 1.0)
+                neo4j_code_edges.append(
+                    {
+                        "code_id": str(code_id),
+                        "frag_id": str(fragment.id),
+                        "confidence": confidence,
+                        "source": "ai",
+                        "run_id": run_id,
+                        "ts": ts_iso,
+                        "char_start": char_start,
+                        "char_end": char_end,
+                    }
+                )
                 links_to_insert.append(
                     {
                         "code_id": code_id,
                         "fragment_id": fragment.id,
-                        "confidence": code_data.get("confidence", 1.0),
+                        "confidence": confidence,
                         "source": "ai",
                         "char_start": char_start,
                         "char_end": char_end,
@@ -338,7 +385,7 @@ class CodingEngine:
                     .on_conflict_do_nothing()
                 )
 
-            embed_texts.append(fragment.text)
+            embed_texts.append(redact_pii_text(fragment.text))
             embed_frag_ids.append(fragment.id)
             embed_code_labels.append(labels_this_frag)
             embed_created_at.append(fragment.created_at.isoformat() if getattr(fragment, "created_at", None) else None)
@@ -384,9 +431,11 @@ class CodingEngine:
             await asyncio.wait_for(
                 neo4j_service.batch_sync_interview(
                     project_id=project_id,
-                    fragments=[(f.id, f.text) for f in fragments],
+                    interview_id=interview_id,
+                    fragments=[(f.id, redact_pii_text(f.text or "")) for f in fragments],
                     codes_cache=codes_cache,
                     fragment_code_pairs=neo4j_pairs,
+                    code_edge_rows=neo4j_code_edges,
                 ),
                 timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
             )

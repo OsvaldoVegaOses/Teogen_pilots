@@ -43,6 +43,7 @@ class ClaimExplainItem(BaseModel):
     text: str
     categories: List[Dict[str, Optional[str]]] = []
     evidence: List[ClaimEvidenceItem] = []
+    counter_evidence: List[ClaimEvidenceItem] = []
     path_examples: List[str] = []
 
 
@@ -78,3 +79,12 @@ class TheoryPipelineSloResponse(BaseModel):
     latency_p50_ms: Dict[str, float] = {}
     quality: Dict[str, Any] = {}
     reliability: Dict[str, Any] = {}
+
+
+class TheoryExportReadinessResponse(BaseModel):
+    project_id: UUID
+    theory_id: UUID
+    exportable: bool
+    blockers: List[Dict[str, Any]] = []
+    quality_gate: Dict[str, Any] = {}
+    privacy_gate: Dict[str, Any] = {}

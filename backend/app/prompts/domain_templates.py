@@ -61,4 +61,22 @@ DOMAIN_TEMPLATES: Dict[str, DomainTemplate] = {
         export_formats=["pdf", "pptx", "xlsx", "png"],
         extra_instructions="Produce insights accionables de mercado y explicita contradicciones entre segmentos.",
     ),
+    "b2c": DomainTemplate(
+        key="b2c",
+        actors=["clientes", "soporte", "operaciones", "canales digitales"],
+        critical_dimensions=["onboarding", "friccion", "retencion", "churn", "satisfaccion"],
+        lexicon_map={"beneficiario": "cliente", "intervencion": "experiencia de servicio"},
+        metrics=["conversion", "retencion", "churn", "NPS", "CSAT"],
+        export_formats=["pdf", "pptx", "xlsx", "png"],
+        extra_instructions="Prioriza insights accionables sobre experiencia cliente y causas de abandono.",
+    ),
+    "consulting": DomainTemplate(
+        key="consulting",
+        actors=["cliente", "equipo consultor", "sponsor", "stakeholders"],
+        critical_dimensions=["alineacion", "riesgos", "adopcion", "valor_entregado", "siguientes_pasos"],
+        lexicon_map={"beneficiario": "cliente", "mercado": "cuenta/industria objetivo"},
+        metrics=["time_to_insight", "decision_readiness", "adopcion_recomendaciones", "satisfaccion_cliente"],
+        export_formats=["pdf", "pptx", "xlsx", "png"],
+        extra_instructions="Enfatiza decisiones ejecutivas, trazabilidad y plan de accion con responsables.",
+    ),
 }

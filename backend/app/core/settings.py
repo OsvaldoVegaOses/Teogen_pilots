@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
+from typing import Dict, List
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
@@ -19,9 +21,35 @@ def _read_env_value(key: str) -> str:
     return ""
 
 
+def _read_raw_env_value(key: str) -> str | None:
+    value = os.getenv(key)
+    if value is not None:
+        return value
+    fallback = _read_env_value(key)
+    if fallback != "":
+        return fallback
+    return None
+
+
+def _normalize_env(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"prod", "production", "live"}:
+        return "production"
+    if normalized in {"staging", "stage", "preprod", "uat"}:
+        return "staging"
+    if normalized in {"dev", "development", "local", "test"}:
+        return "development"
+    return normalized or "development"
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TheoGen"
     TESTING: bool = False
+    APP_ENV: str = "development"
+    THEORY_ENV_PROFILE: str = "auto"
+    THEORY_ENV_PROFILE_EFFECTIVE: str = "development"
+    THEORY_FAIL_STARTUP_ON_CONFIG_ERRORS: bool = False
+    THEORY_CONFIG_ISSUES: List[str] = Field(default_factory=list)
 
     # Frontend URL
     FRONTEND_URL: str = ""
@@ -121,6 +149,8 @@ class Settings(BaseSettings):
     THEORY_EVIDENCE_TARGET_MAX: int = 80
     THEORY_EVIDENCE_MIN_INTERVIEWS: int = 4
     THEORY_EVIDENCE_MAX_SHARE_PER_INTERVIEW: float = 0.4
+    THEORY_EVIDENCE_INDEX_PERSIST_MAX: int = 1000
+    THEORY_EVIDENCE_ID_CATALOG_MAX: int = 5000
 
     # Deterministic validation / traceability (MVP advanced)
     THEORY_USE_JUDGE: bool = False
@@ -167,14 +197,91 @@ class Settings(BaseSettings):
     # Google Identity Services
     GOOGLE_CLIENT_ID: str = ""
 
+    def _resolve_theory_profile(self) -> str:
+        requested = str(self.THEORY_ENV_PROFILE or "auto").strip().lower()
+        if requested in {"production", "staging", "development"}:
+            return requested
+        if requested in {"manual"}:
+            return "manual"
+        app_env = _normalize_env(self.APP_ENV)
+        if app_env in {"production", "staging"}:
+            return app_env
+        return "development"
+
+    def _apply_profile_defaults(self, profile: str) -> None:
+        if profile == "manual":
+            return
+
+        defaults: Dict[str, bool] = {
+            "development": {
+                "THEORY_USE_JUDGE": False,
+                "THEORY_JUDGE_WARN_ONLY": True,
+                "THEORY_SYNC_CLAIMS_NEO4J": False,
+                "THEORY_SYNC_CLAIMS_QDRANT": False,
+            },
+            "staging": {
+                "THEORY_USE_JUDGE": True,
+                "THEORY_JUDGE_WARN_ONLY": True,
+                "THEORY_SYNC_CLAIMS_NEO4J": True,
+                "THEORY_SYNC_CLAIMS_QDRANT": False,
+            },
+            "production": {
+                "THEORY_USE_JUDGE": True,
+                "THEORY_JUDGE_WARN_ONLY": False,
+                "THEORY_SYNC_CLAIMS_NEO4J": True,
+                "THEORY_SYNC_CLAIMS_QDRANT": True,
+            },
+        }.get(profile, {})
+
+        for key, value in defaults.items():
+            setattr(self, key, value)
+
+    def _validate_theory_runtime_config(self, profile: str) -> List[str]:
+        issues: List[str] = []
+        if self.THEORY_JUDGE_WARN_ONLY and not self.THEORY_USE_JUDGE:
+            issues.append("THEORY_JUDGE_WARN_ONLY=true requiere THEORY_USE_JUDGE=true.")
+        if (self.THEORY_SYNC_CLAIMS_NEO4J or self.THEORY_SYNC_CLAIMS_QDRANT) and not self.THEORY_USE_JUDGE:
+            issues.append("Claim sync requiere THEORY_USE_JUDGE=true para trazabilidad consistente.")
+
+        if self.APP_ENV == "production" or profile == "production":
+            if not self.THEORY_USE_JUDGE:
+                issues.append("Produccion requiere THEORY_USE_JUDGE=true.")
+            if self.THEORY_JUDGE_WARN_ONLY:
+                issues.append("Produccion requiere THEORY_JUDGE_WARN_ONLY=false (modo estricto).")
+            if not self.THEORY_SYNC_CLAIMS_NEO4J:
+                issues.append("Produccion requiere THEORY_SYNC_CLAIMS_NEO4J=true.")
+            if not self.THEORY_SYNC_CLAIMS_QDRANT:
+                issues.append("Produccion requiere THEORY_SYNC_CLAIMS_QDRANT=true.")
+
+        return issues
+
+    def theory_runtime_config_summary(self) -> Dict[str, object]:
+        return {
+            "app_env": _normalize_env(self.APP_ENV),
+            "profile_requested": str(self.THEORY_ENV_PROFILE or "auto").strip().lower() or "auto",
+            "profile_effective": str(self.THEORY_ENV_PROFILE_EFFECTIVE or "development"),
+            "use_judge": bool(self.THEORY_USE_JUDGE),
+            "judge_warn_only": bool(self.THEORY_JUDGE_WARN_ONLY),
+            "sync_claims_neo4j": bool(self.THEORY_SYNC_CLAIMS_NEO4J),
+            "sync_claims_qdrant": bool(self.THEORY_SYNC_CLAIMS_QDRANT),
+            "issues": list(self.THEORY_CONFIG_ISSUES or []),
+            "ok": len(self.THEORY_CONFIG_ISSUES or []) == 0,
+        }
+
     @model_validator(mode="after")
     def validate_required_integrations(self):
+        self.APP_ENV = _normalize_env(self.APP_ENV)
         if not self.AZURE_SPEECH_ENDPOINT:
             self.AZURE_SPEECH_ENDPOINT = _read_env_value("AZURE_SPEECH_ENDPOINT")
         if not self.AZURE_SPEECH_KEY:
             self.AZURE_SPEECH_KEY = _read_env_value("AZURE_SPEECH_KEY")
         if not self.NEO4J_USER:
             self.NEO4J_USER = _read_env_value("NEO4J_USER") or _read_env_value("NEO4J_USERNAME")
+
+        profile = self._resolve_theory_profile()
+        self.THEORY_ENV_PROFILE_EFFECTIVE = profile
+        self._apply_profile_defaults(profile)
+        self.THEORY_CONFIG_ISSUES = self._validate_theory_runtime_config(profile)
 
         if self.TESTING:
             return self

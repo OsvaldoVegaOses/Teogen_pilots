@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "@/components/InterviewModal";
 
@@ -47,6 +47,7 @@ interface ClaimExplainItem {
     text: string;
     categories: Array<{ id?: string; name?: string }>;
     evidence: ClaimExplainEvidence[];
+    counter_evidence?: ClaimExplainEvidence[];
     path_examples?: string[];
 }
 
@@ -60,6 +61,21 @@ interface ClaimExplainResponse {
     claim_type_filter?: string | null;
     claim_count: number;
     claims: ClaimExplainItem[];
+}
+
+interface ExportReadinessResponse {
+    exportable: boolean;
+    blockers: Array<{ code: string; message: string }>;
+    quality_gate?: {
+        blocked?: boolean;
+        claims_count?: number;
+        claims_without_evidence?: number;
+    };
+    privacy_gate?: {
+        blocked?: boolean;
+        issues_count?: number;
+        type_counts?: Record<string, number>;
+    };
 }
 
 const CLAIMS_PAGE_SIZE = 10;
@@ -100,6 +116,8 @@ export default function TheoryViewer({
     const [claimsSectionFilter, setClaimsSectionFilter] = useState<string>(viewerState?.sectionFilter || "all");
     const [claimsTypeFilter, setClaimsTypeFilter] = useState<string>(viewerState?.claimTypeFilter || "all");
     const [claimsPage, setClaimsPage] = useState(viewerState?.page || 0);
+    const [exportReadiness, setExportReadiness] = useState<ExportReadinessResponse | null>(null);
+    const [exportReadinessLoading, setExportReadinessLoading] = useState(false);
     const modelJson = (theory?.model_json || {}) as LooseRecord;
 
     const toDisplayText = (value: unknown): string => {
@@ -207,6 +225,31 @@ export default function TheoryViewer({
         };
     }, [projectId, theory?.id, claimsPage, claimsSectionFilter, claimsTypeFilter]);
 
+    useEffect(() => {
+        let ignore = false;
+        const loadReadiness = async () => {
+            if (!projectId || !theory?.id) return;
+            setExportReadinessLoading(true);
+            try {
+                const response = await apiClient(
+                    `/projects/${projectId}/theories/${theory.id}/export/readiness`,
+                    { method: "GET" }
+                );
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = (await response.json()) as ExportReadinessResponse;
+                if (!ignore) setExportReadiness(data);
+            } catch {
+                if (!ignore) setExportReadiness(null);
+            } finally {
+                if (!ignore) setExportReadinessLoading(false);
+            }
+        };
+        loadReadiness();
+        return () => {
+            ignore = true;
+        };
+    }, [projectId, theory?.id]);
+
     const validation = (theory?.validation || {}) as LooseRecord;
     const networkSummary = (validation.network_metrics_summary || {}) as LooseRecord;
     const counts = (networkSummary.counts || {}) as LooseRecord;
@@ -271,7 +314,18 @@ export default function TheoryViewer({
         toDisplayText(modelJson.consequences) ||
         "No disponible";
 
+    const exportBlocked =
+        exportReadinessLoading ||
+        (exportReadiness ? exportReadiness.exportable === false : false);
+    const exportBlockReason =
+        exportReadiness?.blockers?.map((b) => b.message).filter(Boolean).join(" ") ||
+        "Exportacion bloqueada por controles de calidad/privacidad.";
+
     const handleExport = async (format: "pdf" | "pptx" | "xlsx" | "png") => {
+        if (exportBlocked) {
+            alert(exportBlockReason);
+            return;
+        }
         setIsExporting(true);
         setExportingFormat(format);
         try {
@@ -289,7 +343,27 @@ export default function TheoryViewer({
                 document.body.removeChild(link);
                 if (onExportComplete) onExportComplete();
             } else {
-                alert("Error al generar el reporte. Intente nuevamente.");
+                let message = "Error al generar el reporte. Intente nuevamente.";
+                try {
+                    const payload = await response.json();
+                    const detail = payload?.detail;
+                    if (typeof detail === "string" && detail.trim()) {
+                        message = detail;
+                    } else if (detail && typeof detail === "object") {
+                        const base = typeof detail.message === "string" ? detail.message : "";
+                        const remediation = Array.isArray(detail.remediation)
+                            ? detail.remediation.map((item: unknown) => String(item)).filter(Boolean)
+                            : [];
+                        if (base && remediation.length) {
+                            message = `${base}\n\nRemediacion:\n- ${remediation.join("\n- ")}`;
+                        } else if (base) {
+                            message = base;
+                        }
+                    }
+                } catch {
+                    // Keep default message if response payload is not JSON.
+                }
+                alert(message);
             }
         } catch (error) {
             console.error("Export error:", error);
@@ -326,7 +400,7 @@ export default function TheoryViewer({
                     <h2 className="text-2xl font-bold dark:text-white mb-2">
                         Teoria Fundamentada (v{theory.version})
                     </h2>
-                    <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300">
+                <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300">
                         <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium dark:bg-indigo-900/30 dark:text-indigo-300">
                             {displayModelName(theory.generated_by)}
                         </span>
@@ -336,6 +410,16 @@ export default function TheoryViewer({
                                 Prompt: {String(promptVersion)}
                             </span>
                         )}
+                        <span
+                            className={`px-3 py-1 rounded-full font-bold text-xs ${
+                                exportBlocked
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                            }`}
+                            title={exportBlocked ? exportBlockReason : "Apto para exportar"}
+                        >
+                            {exportBlocked ? "Export bloqueado" : "Apto para exportar"}
+                        </span>
                     </div>
                 </div>
 
@@ -344,8 +428,9 @@ export default function TheoryViewer({
                         <button
                             key={fmt}
                             onClick={() => handleExport(fmt)}
-                            disabled={isExporting}
+                            disabled={isExporting || exportBlocked}
                             className="bg-zinc-900 text-white px-4 py-2 rounded-xl font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase text-xs"
+                            title={exportBlocked ? exportBlockReason : `Exportar ${fmt}`}
                         >
                             {isExporting && exportingFormat === fmt ? `Generando ${fmt}...` : `Exportar ${fmt}`}
                         </button>
@@ -454,14 +539,14 @@ export default function TheoryViewer({
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Cobertura de evidencia</div>
                                 <div className="text-zinc-700 dark:text-zinc-300">
-                                    Proposiciones con evidencia: {evidenceCoverage.propsWithEvidence}/{evidenceCoverage.propsTotal} · Consecuencias con evidencia: {evidenceCoverage.consWithEvidence}/{evidenceCoverage.consTotal}
+                                    Proposiciones con evidencia: {evidenceCoverage.propsWithEvidence}/{evidenceCoverage.propsTotal} Â· Consecuencias con evidencia: {evidenceCoverage.consWithEvidence}/{evidenceCoverage.consTotal}
                                 </div>
                             </div>
 
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Grafo (Neo4j)</div>
                                 <div className="text-zinc-700 dark:text-zinc-300">
-                                    Categorias: {Number(counts.category_count ?? 0)} · Codigos: {Number(counts.code_count ?? 0)} · Fragmentos: {Number(counts.fragment_count ?? 0)}
+                                    Categorias: {Number(counts.category_count ?? 0)} Â· Codigos: {Number(counts.code_count ?? 0)} Â· Fragmentos: {Number(counts.fragment_count ?? 0)}
                                 </div>
                                 {centrality.length > 0 && (
                                     <div className="mt-3 overflow-auto">
@@ -537,7 +622,7 @@ export default function TheoryViewer({
                                                         return (
                                                         <div key={j} className="text-xs text-zinc-700 dark:text-zinc-300">
                                                             <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                                                                fragment_id: {toDisplayText(f.fragment_id || f.id)} · score: {toDisplayText(f.score ?? "")}
+                                                                fragment_id: {toDisplayText(f.fragment_id || f.id)} Â· score: {toDisplayText(f.score ?? "")}
                                                             </div>
                                                             <div className="whitespace-pre-wrap break-words">{toDisplayText(f.text)}</div>
                                                             {Boolean(f.fragment_id || f.id) && (
@@ -565,7 +650,7 @@ export default function TheoryViewer({
                                     <div>
                                         <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Ver evidencia por claim</div>
                                         <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                                            Fuente: {claimsData?.source || "cargando"} · Total: {claimsTotal}
+                                            Fuente: {claimsData?.source || "cargando"} Â· Total: {claimsTotal}
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
@@ -630,7 +715,7 @@ export default function TheoryViewer({
                                                             {claim.evidence.slice(0, 5).map((ev: ClaimExplainEvidence, j: number) => (
                                                                 <div key={`${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-700 dark:text-zinc-300">
                                                                     <div>
-                                                                        fragment_id: {ev.fragment_id} · score: {ev.score ?? ""} · rank: {ev.rank ?? ""}
+                                                                        fragment_id: {ev.fragment_id} - score: {ev.score ?? ""} - rank: {ev.rank ?? ""}
                                                                     </div>
                                                                     {ev.text && <div className="break-words whitespace-pre-wrap">{ev.text}</div>}
                                                                     {ev.fragment_id && (
@@ -644,6 +729,29 @@ export default function TheoryViewer({
                                                                 </div>
                                                             ))}
                                                         </div>
+                                                        {Array.isArray(claim.counter_evidence) && claim.counter_evidence.length > 0 && (
+                                                            <div className="mt-2 space-y-1">
+                                                                <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                                                                    Evidencia contradictoria
+                                                                </div>
+                                                                {claim.counter_evidence.slice(0, 3).map((ev: ClaimExplainEvidence, j: number) => (
+                                                                    <div key={`contra-${ev.fragment_id}-${j}`} className="text-[11px] text-zinc-700 dark:text-zinc-300">
+                                                                        <div>
+                                                                            fragment_id: {ev.fragment_id} - score: {ev.score ?? ""} - rank: {ev.rank ?? ""}
+                                                                        </div>
+                                                                        {ev.text && <div className="break-words whitespace-pre-wrap">{ev.text}</div>}
+                                                                        {ev.fragment_id && (
+                                                                            <button
+                                                                                onClick={() => openFragmentInTranscript(String(ev.fragment_id))}
+                                                                                className="mt-1 text-[11px] font-bold text-amber-600"
+                                                                            >
+                                                                                Abrir en transcripcion
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
@@ -703,3 +811,4 @@ export default function TheoryViewer({
         </div>
     );
 }
+

@@ -5,6 +5,9 @@ from typing import Any, Dict, Iterable, List
 
 from openpyxl import Workbook
 
+from .executive_framework import build_executive_framework
+from .privacy import redact_pii_text
+
 
 class XlsxGenerator:
     @staticmethod
@@ -12,15 +15,15 @@ class XlsxGenerator:
         if value is None:
             return ""
         if isinstance(value, (str, int, float, bool)):
-            return str(value)
+            return redact_pii_text(str(value))
         if isinstance(value, list):
             return " | ".join([XlsxGenerator._as_text(v) for v in value if v is not None])
         if isinstance(value, dict):
             for key in ("text", "description", "definition", "name", "id"):
                 if key in value and value[key] is not None:
-                    return str(value[key])
-            return str(value)
-        return str(value)
+                    return redact_pii_text(str(value[key]))
+            return redact_pii_text(str(value))
+        return redact_pii_text(str(value))
 
     @staticmethod
     def _append_kv_sheet(ws, data: Dict[str, Any]) -> None:
@@ -127,6 +130,33 @@ class XlsxGenerator:
         ws_metrics.append(["network_category_count", counts.get("category_count", 0)])
         ws_metrics.append(["network_code_count", counts.get("code_count", 0)])
         ws_metrics.append(["network_fragment_count", counts.get("fragment_count", 0)])
+
+        framework = build_executive_framework(theory_data)
+        quality = framework.get("quality_metrics", {}) if isinstance(framework.get("quality_metrics"), dict) else {}
+
+        ws_decision = wb.create_sheet("DecisionFramework")
+        ws_decision.append(["Campo", "Valor"])
+        ws_decision.append(["recommendation", framework.get("recommendation", "PILOT")])
+        ws_decision.append(["claims_count", quality.get("claims_count", 0)])
+        ws_decision.append(["claims_without_evidence", quality.get("claims_without_evidence", 0)])
+        ws_decision.append(["interviews_covered", quality.get("interviews_covered", 0)])
+        ws_decision.append(["gaps_count", quality.get("gaps_count", 0)])
+        ws_decision.append(["gaps_high", quality.get("gaps_high", 0)])
+        ws_decision.append(["judge_warn_only", quality.get("judge_warn_only", False)])
+        ws_decision.append([])
+        ws_decision.append(["Razon"])
+        for reason in self._as_rows(framework.get("reasons", []), limit=20):
+            ws_decision.append([reason])
+
+        ws_action = wb.create_sheet("PlanAccion")
+        ws_action.append(["#", "accion"])
+        for idx, action in enumerate(self._as_rows(framework.get("action_plan", []), limit=20), start=1):
+            ws_action.append([idx, action])
+
+        ws_limits = wb.create_sheet("Limites")
+        ws_limits.append(["#", "limitacion"])
+        for idx, item in enumerate(self._as_rows(framework.get("limitations", []), limit=20), start=1):
+            ws_limits.append([idx, item])
 
         for ws in wb.worksheets:
             for col in ws.columns:

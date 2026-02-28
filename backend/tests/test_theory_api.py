@@ -56,9 +56,26 @@ async def test_export_theory_success_logic(client, monkeypatch):
     mock_theory.version = 1
     mock_theory.confidence_score = 0.9
     mock_theory.generated_by = "AI"
-    mock_theory.model_json = {}
+    mock_theory.model_json = {
+        "conditions": [{"name": "Condicion trazable", "evidence_ids": ["f1"]}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
     mock_theory.propositions = []
     mock_theory.gaps = []
+    mock_theory.validation = {
+        "claim_metrics": {
+            "claims_count": 1,
+            "claims_without_evidence": 0,
+        },
+        "network_metrics_summary": {
+            "evidence_index": [{"fragment_id": "f1", "id": "f1", "text": "Evidencia 1"}],
+            "evidence_ids": ["f1"],
+        },
+    }
     
     mock_project = MagicMock()
     mock_project.id = project_id
@@ -93,6 +110,595 @@ async def test_export_theory_success_logic(client, monkeypatch):
     assert "download_url" in data
     assert data["download_url"] == "https://azure.com/blob?sas=123"
     assert "TheoGen_Test_Project.pdf" in data["filename"]
+
+
+def test_export_theory_blocks_when_claims_without_evidence(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.version = 1
+    mock_theory.confidence_score = 0.8
+    mock_theory.generated_by = "AI"
+    mock_theory.model_json = {
+        "conditions": [{"name": "Condicion A", "evidence_ids": []}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.gaps = []
+    mock_theory.validation = {
+        "claim_metrics": {
+            "claims_count": 1,
+            "claims_without_evidence": 1,
+        }
+    }
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.name = "Proyecto Calidad"
+    mock_project.language = "es"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    generate_report_mock = AsyncMock()
+    monkeypatch.setattr("app.services.export_service.export_service.generate_theory_report", generate_report_mock)
+
+    response = client.post(f"/api/projects/{project_id}/theories/{theory_id}/export")
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"]["code"] == "EXPORT_QUALITY_GATE_FAILED"
+    assert body["detail"]["quality_gate"]["blocked"] is True
+    assert body["detail"]["quality_gate"]["claims_without_evidence"] == 1
+    generate_report_mock.assert_not_awaited()
+
+
+def test_export_theory_blocks_when_no_claims(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.version = 1
+    mock_theory.confidence_score = 0.8
+    mock_theory.generated_by = "AI"
+    mock_theory.model_json = {
+        "conditions": [],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.gaps = []
+    mock_theory.validation = {
+        "claim_metrics": {
+            "claims_count": 0,
+            "claims_without_evidence": 0,
+        }
+    }
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.name = "Proyecto Sin Claims"
+    mock_project.language = "es"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    generate_report_mock = AsyncMock()
+    monkeypatch.setattr("app.services.export_service.export_service.generate_theory_report", generate_report_mock)
+
+    response = client.post(f"/api/projects/{project_id}/theories/{theory_id}/export")
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"]["code"] == "EXPORT_QUALITY_GATE_FAILED"
+    assert body["detail"]["quality_gate"]["blocked"] is True
+    assert body["detail"]["quality_gate"]["claims_count"] == 0
+    reasons = body["detail"]["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "NO_CLAIMS" for r in reasons)
+    generate_report_mock.assert_not_awaited()
+
+
+def test_export_theory_blocks_when_privacy_gate_detects_pii(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.version = 1
+    mock_theory.confidence_score = 0.82
+    mock_theory.generated_by = "AI"
+    mock_theory.model_json = {
+        "conditions": [{"name": "Contacto maria.perez@example.org", "evidence_ids": ["f1"]}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.gaps = []
+    mock_theory.validation = {
+        "claim_metrics": {
+            "claims_count": 1,
+            "claims_without_evidence": 0,
+        },
+        "network_metrics_summary": {
+            "evidence_index": [{"text": "Telefono +56 9 8765 4321", "fragment_id": "f1"}]
+        },
+    }
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.name = "Proyecto Privacidad"
+    mock_project.language = "es"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    generate_report_mock = AsyncMock()
+    monkeypatch.setattr("app.services.export_service.export_service.generate_theory_report", generate_report_mock)
+
+    response = client.post(f"/api/projects/{project_id}/theories/{theory_id}/export")
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"]["code"] == "EXPORT_PRIVACY_GATE_FAILED"
+    assert body["detail"]["privacy_gate"]["blocked"] is True
+    assert body["detail"]["privacy_gate"]["issues_count"] >= 1
+    generate_report_mock.assert_not_awaited()
+
+
+def test_get_export_readiness_returns_blockers(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [{"name": "Contacto test@correo.cl", "evidence_ids": []}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {"claim_metrics": {"claims_count": 1, "claims_without_evidence": 1}}
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    assert len(body["blockers"]) >= 1
+    codes = {b["code"] for b in body["blockers"]}
+    assert "EXPORT_QUALITY_GATE_FAILED" in codes
+
+
+def test_get_export_readiness_exportable_true(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [{"name": "Condicion limpia", "evidence_ids": ["f1"]}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {"claim_metrics": {"claims_count": 1, "claims_without_evidence": 0}}
+    mock_theory.validation["network_metrics_summary"] = {
+        "evidence_index": [{"fragment_id": "f1", "id": "f1", "text": "Evidencia valida"}],
+        "evidence_ids": ["f1"],
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is True
+    assert body["blockers"] == []
+
+
+def test_get_export_readiness_blocks_when_evidence_catalog_missing(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [{"name": "Condicion trazable", "evidence_ids": ["f1"]}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {"claim_metrics": {"claims_count": 1, "claims_without_evidence": 0}}
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    reasons = body["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "EVIDENCE_INDEX_MISSING" for r in reasons)
+
+
+def test_get_export_readiness_blocks_when_evidence_reference_is_unresolved(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [{"name": "Condicion trazable", "evidence_ids": ["f1"]}],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 1, "claims_without_evidence": 0},
+        "network_metrics_summary": {
+            "evidence_index": [{"fragment_id": "f2", "id": "f2", "text": "Otro fragmento"}],
+            "evidence_ids": ["f2"],
+        },
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    reasons = body["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "UNRESOLVED_EVIDENCE_REFERENCES" for r in reasons)
+
+
+def test_get_export_readiness_blocks_when_no_claims(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {"claim_metrics": {"claims_count": 0, "claims_without_evidence": 0}}
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    assert any(b.get("code") == "EXPORT_QUALITY_GATE_FAILED" for b in body["blockers"])
+    assert body["quality_gate"]["claims_count"] == 0
+
+
+def test_get_export_readiness_blocks_when_template_min_interviews_not_met(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion A", "evidence_ids": ["f1"]},
+            {"name": "Condicion B", "evidence_ids": ["f2"]},
+        ],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 2, "claims_without_evidence": 0, "interviews_covered": 1},
+        "judge": {"warn_only": False},
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+    mock_project.domain_template = "market_research"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    reasons = body["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "TEMPLATE_MIN_INTERVIEWS" for r in reasons)
+
+
+def test_export_theory_blocks_when_template_warn_only(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.version = 1
+    mock_theory.confidence_score = 0.85
+    mock_theory.generated_by = "AI"
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion A", "evidence_ids": ["f1"]},
+            {"name": "Condicion B", "evidence_ids": ["f2"]},
+        ],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.gaps = []
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 2, "claims_without_evidence": 0, "interviews_covered": 3},
+        "judge": {"warn_only": True},
+    }
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.name = "Proyecto Consulting"
+    mock_project.language = "es"
+    mock_project.domain_template = "consulting"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    generate_report_mock = AsyncMock()
+    monkeypatch.setattr("app.services.export_service.export_service.generate_theory_report", generate_report_mock)
+
+    response = client.post(f"/api/projects/{project_id}/theories/{theory_id}/export")
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"]["code"] == "EXPORT_QUALITY_GATE_FAILED"
+    reasons = body["detail"]["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "TEMPLATE_WARN_ONLY_NOT_ALLOWED" for r in reasons)
+    generate_report_mock.assert_not_awaited()
+
+
+def test_get_export_readiness_blocks_when_template_structural_minima_not_met(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion A", "evidence_ids": ["f1"]},
+            {"name": "Condicion B", "evidence_ids": ["f2"]},
+        ],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = []
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 2, "claims_without_evidence": 0, "interviews_covered": 3},
+        "judge": {"warn_only": False},
+        "network_metrics_summary": {
+            "evidence_index": [
+                {"fragment_id": "f1", "id": "f1", "text": "E1"},
+                {"fragment_id": "f2", "id": "f2", "text": "E2"},
+                {"fragment_id": "f3", "id": "f3", "text": "E3"},
+                {"fragment_id": "f4", "id": "f4", "text": "E4"},
+            ],
+            "evidence_ids": ["f1", "f2", "f3", "f4"],
+        },
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+    mock_project.domain_template = "education"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    reasons = body["quality_gate"].get("blocked_reasons") or []
+    codes = {r.get("code") for r in reasons}
+    assert "TEMPLATE_MIN_PROPOSITIONS" in codes
+    assert "TEMPLATE_MIN_CONSEQUENCES" in codes
+    assert "TEMPLATE_CONTEXT_REQUIRED" in codes
+
+
+def test_get_export_readiness_blocks_when_template_consequence_balance_not_met(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion A", "evidence_ids": ["f1"]},
+            {"name": "Condicion B", "evidence_ids": ["f2"]},
+        ],
+        "actions": [],
+        "consequences": [
+            {"name": "Costo inicial alto", "type": "material", "horizon": "corto_plazo", "evidence_ids": ["f1"]},
+            {"name": "Friccion operativa", "type": "material", "horizon": "corto_plazo", "evidence_ids": ["f2"]},
+            {"name": "Carga de gestion", "type": "material", "horizon": "corto_plazo", "evidence_ids": ["f3"]},
+        ],
+        "propositions": [],
+        "context": [{"name": "Entorno competitivo estable", "evidence_ids": ["f4"]}],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = [
+        {"text": "P1"},
+        {"text": "P2"},
+        {"text": "P3"},
+        {"text": "P4"},
+        {"text": "P5"},
+    ]
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 2, "claims_without_evidence": 0, "interviews_covered": 3},
+        "judge": {"warn_only": False},
+        "network_metrics_summary": {
+            "evidence_index": [
+                {"fragment_id": "f1", "id": "f1", "text": "E1"},
+                {"fragment_id": "f2", "id": "f2", "text": "E2"},
+                {"fragment_id": "f3", "id": "f3", "text": "E3"},
+                {"fragment_id": "f4", "id": "f4", "text": "E4"},
+            ],
+            "evidence_ids": ["f1", "f2", "f3", "f4"],
+        },
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+    mock_project.domain_template = "market_research"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is False
+    reasons = body["quality_gate"].get("blocked_reasons") or []
+    assert any(r.get("code") == "TEMPLATE_CONSEQUENCE_BALANCE" for r in reasons)
+
+
+def test_get_export_readiness_exportable_true_for_strict_template(client):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion A", "evidence_ids": ["f1"]},
+            {"name": "Condicion B", "evidence_ids": ["f2"]},
+        ],
+        "actions": [],
+        "consequences": [
+            {"name": "Efecto financiero", "type": "material", "horizon": "corto_plazo", "evidence_ids": ["f1"]},
+            {"name": "Cambio cultural", "type": "social", "horizon": "largo_plazo", "evidence_ids": ["f2"]},
+            {"name": "Ajuste normativo", "type": "institutional", "horizon": "corto_plazo", "evidence_ids": ["f3"]},
+        ],
+        "propositions": [],
+        "context": [{"name": "Contexto habilitante", "evidence_ids": ["f4"]}],
+        "intervening_conditions": [],
+    }
+    mock_theory.propositions = [
+        {"text": "Proposicion 1"},
+        {"text": "Proposicion 2"},
+        {"text": "Proposicion 3"},
+        {"text": "Proposicion 4"},
+        {"text": "Proposicion 5"},
+    ]
+    mock_theory.validation = {
+        "claim_metrics": {"claims_count": 2, "claims_without_evidence": 0, "interviews_covered": 3},
+        "judge": {"warn_only": False},
+        "network_metrics_summary": {
+            "evidence_index": [
+                {"fragment_id": "f1", "id": "f1", "text": "E1"},
+                {"fragment_id": "f2", "id": "f2", "text": "E2"},
+                {"fragment_id": "f3", "id": "f3", "text": "E3"},
+                {"fragment_id": "f4", "id": "f4", "text": "E4"},
+            ],
+            "evidence_ids": ["f1", "f2", "f3", "f4"],
+        },
+    }
+    mock_theory.gaps = []
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+    mock_project.domain_template = "government"
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/export/readiness")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["exportable"] is True
+    assert body["quality_gate"]["blocked"] is False
+    assert body["blockers"] == []
 
 
 def test_explain_theory_claims_fallback_validation(client, monkeypatch):
@@ -175,6 +781,7 @@ def test_explain_theory_claims_prefers_neo4j(client, monkeypatch):
                     "text": "Riesgo hídrico",
                     "categories": [{"id": str(uuid.uuid4()), "name": "Agua"}],
                     "evidence": [{"fragment_id": fragment_id, "score": 0.88, "rank": 0, "text": "snippet"}],
+                    "counter_evidence": [{"fragment_id": fragment_id, "score": 0.22, "rank": 1, "text": "contra"}],
                 }
             ]
         ),
@@ -186,6 +793,8 @@ def test_explain_theory_claims_prefers_neo4j(client, monkeypatch):
     assert body["source"] == "neo4j"
     assert body["claim_count"] == 1
     assert body["claims"][0]["claim_id"] == "c1"
+    assert len(body["claims"][0]["counter_evidence"]) == 1
+    assert body["claims"][0]["counter_evidence"][0]["fragment_id"] == fragment_id
     assert body["total"] == 1
     assert body["has_more"] is False
 
@@ -244,6 +853,98 @@ def test_explain_theory_claims_fallback_with_filters_and_pagination(client, monk
     assert body["has_more"] is False
     assert body["section_filter"] == "conditions"
     assert body["claims"][0]["text"] == "Condicion B"
+
+
+def test_explain_theory_claims_fallback_supports_mixed_shapes(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+    frag_a = str(uuid.uuid4())
+    frag_b = str(uuid.uuid4())
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": [
+            {"name": "Condicion estructurada", "evidence_id": frag_a, "counter_evidence_ids": [frag_b]},
+            "Condicion en texto libre",
+        ],
+        "actions": [],
+        "consequences": ["Consecuencia en texto libre"],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    mock_theory.validation = {
+        "network_metrics_summary": {
+            "evidence_index": [
+                {"id": frag_a, "fragment_id": frag_a, "text": "Estructurada A", "interview_id": str(uuid.uuid4())},
+                {"id": frag_b, "fragment_id": frag_b, "text": "No usada"},
+            ]
+        }
+    }
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    monkeypatch.setattr(
+        "app.api.theory.neo4j_service.get_theory_claims_explain",
+        AsyncMock(return_value={"total": 0, "claims": []}),
+    )
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/claims/explain")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "validation_fallback"
+    texts = [c["text"] for c in body["claims"]]
+    assert "Condicion estructurada" in texts
+    assert "Condicion en texto libre" in texts
+    assert "Consecuencia en texto libre" in texts
+    structured = next(c for c in body["claims"] if c["text"] == "Condicion estructurada")
+    assert structured["evidence"][0]["fragment_id"] == frag_a
+    assert structured["counter_evidence"][0]["fragment_id"] == frag_b
+
+
+def test_explain_theory_claims_fallback_handles_invalid_evidence_index_shape(client, monkeypatch):
+    project_id = uuid.uuid4()
+    theory_id = uuid.uuid4()
+
+    mock_theory = MagicMock()
+    mock_theory.id = theory_id
+    mock_theory.model_json = {
+        "conditions": ["Condicion sin evidencia"],
+        "actions": [],
+        "consequences": [],
+        "propositions": [],
+        "context": [],
+        "intervening_conditions": [],
+    }
+    # Malformed shape should not break endpoint.
+    mock_theory.validation = {"network_metrics_summary": {"evidence_index": {"bad": "shape"}}}
+
+    mock_project = MagicMock()
+    mock_project.id = project_id
+    mock_project.owner_id = mock_user_uuid
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=MagicMock(first=MagicMock(return_value=(mock_theory, mock_project))))
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    monkeypatch.setattr(
+        "app.api.theory.neo4j_service.get_theory_claims_explain",
+        AsyncMock(return_value={"total": 0, "claims": []}),
+    )
+
+    response = client.get(f"/api/projects/{project_id}/theories/{theory_id}/claims/explain")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "validation_fallback"
+    assert body["claim_count"] == 1
+    assert body["claims"][0]["text"] == "Condicion sin evidencia"
+    assert body["claims"][0]["evidence"] == []
 
 
 def test_explain_theory_claims_neo4j_filters_and_offset(client, monkeypatch):
@@ -424,6 +1125,9 @@ def test_get_theory_pipeline_slo_success(client):
     assert body["latest_theory_id"] == str(theory_id)
     assert body["latency_p95_ms"]["neo4j_metrics_ms"] >= 120.0
     assert body["quality"]["judge_warn_only_runs"] == 1
+    assert body["quality"]["claim_explain_metric_runs"] == 2
+    assert body["quality"]["claim_explain_success_runs"] == 1
+    assert body["quality"]["claim_explain_success_rate"] == 0.5
     assert body["reliability"]["network_sql_fallback_runs"] == 1
 
 

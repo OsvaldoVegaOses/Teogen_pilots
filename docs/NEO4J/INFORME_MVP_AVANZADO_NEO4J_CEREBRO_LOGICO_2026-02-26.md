@@ -196,7 +196,7 @@ Objetivo: reemplazar “categorías + evidencia en bruto” por:
 Neo4j calcula:
 
 - top por centralidad (ya existe: `get_project_network_metrics`),
-- top co‑occurrences (ya existe),
+- top co‑ocurrences (ya existe),
 - opcional: GDS PageRank/Degree si está instalado (ya hay fallback GDS en `neo4j_service.get_project_network_metrics`).
 
 Subgrafo sugerido:
@@ -219,7 +219,9 @@ Neo4j entrega:
 - caminos más fuertes central→otros (por weight),
 - clusters relevantes (si GDS).
 
-Qdrant entrega evidencia por:
+Evidencia:
+
+- Qdrant entrega evidencia por:
 
 - categorías clave,
 - edges clave (evidencia “conjunta”).

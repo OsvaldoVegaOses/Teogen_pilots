@@ -17,6 +17,7 @@ from app.services.qdrant_service import qdrant_service
 _level_name = (os.getenv("APP_LOG_LEVEL") or "INFO").upper()
 _level = getattr(logging, _level_name, logging.INFO)
 logging.getLogger().setLevel(_level)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +43,27 @@ async def lifespan(app: FastAPI):
     qdrant_ok = await qdrant_service.verify_connectivity()
     if not qdrant_ok:
         raise RuntimeError("Qdrant connectivity check failed during startup")
+
+    runtime_cfg = settings.theory_runtime_config_summary()
+    if not runtime_cfg.get("ok", True):
+        issues = runtime_cfg.get("issues") or []
+        logger.warning(
+            "Theory runtime config has %s issue(s) | profile=%s | issues=%s",
+            len(issues),
+            runtime_cfg.get("profile_effective"),
+            issues,
+        )
+        if settings.THEORY_FAIL_STARTUP_ON_CONFIG_ERRORS:
+            raise RuntimeError(f"Theory runtime config invalid: {issues}")
+    else:
+        logger.info(
+            "Theory runtime config OK | profile=%s | judge=%s | warn_only=%s | sync_neo4j=%s | sync_qdrant=%s",
+            runtime_cfg.get("profile_effective"),
+            runtime_cfg.get("use_judge"),
+            runtime_cfg.get("judge_warn_only"),
+            runtime_cfg.get("sync_claims_neo4j"),
+            runtime_cfg.get("sync_claims_qdrant"),
+        )
 
     try:
         yield
@@ -126,6 +148,7 @@ async def health_dependencies(x_health_key: str | None = Header(default=None, al
     payload = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "pipeline": {"theory_runtime_config": settings.theory_runtime_config_summary()},
         "dependencies": {
             "neo4j": {
                 "enabled": bool(getattr(neo4j_service, "enabled", False)),
@@ -162,7 +185,8 @@ async def health_dependencies(x_health_key: str | None = Header(default=None, al
     qdrant_enabled = payload["dependencies"]["qdrant"]["enabled"]
     neo4j_ok = payload["dependencies"]["neo4j"]["ok"]
     qdrant_ok = payload["dependencies"]["qdrant"]["ok"]
-    if (neo4j_enabled and not neo4j_ok) or (qdrant_enabled and not qdrant_ok):
+    theory_runtime_ok = bool((payload.get("pipeline") or {}).get("theory_runtime_config", {}).get("ok", True))
+    if (neo4j_enabled and not neo4j_ok) or (qdrant_enabled and not qdrant_ok) or (not theory_runtime_ok):
         payload["status"] = "degraded"
     return payload
 

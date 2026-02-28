@@ -5,6 +5,7 @@ from uuid import UUID
 import uuid
 import logging
 import asyncio
+import re
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import json as _json
@@ -171,6 +172,72 @@ def _ms_range(start_ms: Optional[int], end_ms: Optional[int]) -> str:
     if start_ms is None or end_ms is None:
         return ""
     return f"{start_ms}-{end_ms}ms"
+
+
+def _segments_from_full_text(full_text: str, max_chars: int = 450) -> List[Dict[str, Any]]:
+    text = str(full_text or "").strip()
+    if not text:
+        return []
+
+    paragraphs = [part.strip() for part in text.splitlines() if part.strip()]
+    if not paragraphs:
+        paragraphs = [text]
+
+    segments: List[Dict[str, Any]] = []
+    for paragraph in paragraphs:
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", paragraph) if s.strip()]
+        if not sentences:
+            sentences = [paragraph]
+        buffer = ""
+        for sentence in sentences:
+            candidate = sentence if not buffer else f"{buffer} {sentence}"
+            if len(candidate) <= max_chars:
+                buffer = candidate
+                continue
+            if buffer:
+                segments.append(
+                    {
+                        "text": buffer.strip(),
+                        "speaker": "Unknown",
+                        "offsetMilliseconds": None,
+                        "durationMilliseconds": None,
+                    }
+                )
+            if len(sentence) <= max_chars:
+                buffer = sentence
+            else:
+                for idx in range(0, len(sentence), max_chars):
+                    chunk = sentence[idx : idx + max_chars].strip()
+                    if chunk:
+                        segments.append(
+                            {
+                                "text": chunk,
+                                "speaker": "Unknown",
+                                "offsetMilliseconds": None,
+                                "durationMilliseconds": None,
+                            }
+                        )
+                buffer = ""
+        if buffer:
+            segments.append(
+                {
+                    "text": buffer.strip(),
+                    "speaker": "Unknown",
+                    "offsetMilliseconds": None,
+                    "durationMilliseconds": None,
+                }
+            )
+
+    if segments:
+        return segments
+    return [
+        {
+            "text": text,
+            "speaker": "Unknown",
+            "offsetMilliseconds": None,
+            "durationMilliseconds": None,
+        }
+    ]
 
 
 async def _build_export_payload(
@@ -480,12 +547,18 @@ async def process_transcription(interview_id: UUID, blob_name: str):
                 interview.transcription_status = "completed"
                 interview.transcription_method = result["method"]
                 interview.word_count = len(result["full_text"].split())
-                interview.speakers = result.get("segments", [])
+                raw_segments = result.get("segments")
+                segments = raw_segments if isinstance(raw_segments, list) else []
+                if not segments:
+                    segments = _segments_from_full_text(result.get("full_text") or "")
+                interview.speakers = segments
 
                 # Create Fragments from segments with positional anchors for deep-linking.
                 running_offset = 0
-                for idx, segment in enumerate(result.get("segments", []), start=1):
+                for idx, segment in enumerate(segments, start=1):
                     seg_text = segment.get("text", "") or ""
+                    if not seg_text.strip():
+                        continue
                     if seg_text:
                         found_pos = interview.full_text.find(seg_text, running_offset)
                         if found_pos < 0:

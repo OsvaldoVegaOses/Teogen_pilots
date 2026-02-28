@@ -17,6 +17,7 @@ from ..core.settings import settings
 from ..models.models import Category, Code, Fragment, Interview, Project, Theory, code_fragment_links
 from ..schemas.theory import TheoryGenerateRequest
 from ..services.azure_openai import foundry_openai
+from ..services.export.privacy import redact_pii_text
 from ..services.neo4j_service import neo4j_service
 from ..services.qdrant_service import qdrant_service
 from ..utils.token_budget import ensure_within_budget
@@ -955,7 +956,7 @@ class TheoryPipeline:
             category_id = str(cat.id)
             code_labels = code_labels_by_category.get(category_id, [])[:10]
             code_part = f" Codigos asociados: {', '.join(code_labels)}." if code_labels else ""
-            summary = f"{cat.name}. {cat.definition or ''}.{code_part}".strip()
+            summary = redact_pii_text(f"{cat.name}. {cat.definition or ''}.{code_part}".strip())
             if not summary:
                 continue
             summary_texts.append(summary)
@@ -1030,6 +1031,7 @@ class TheoryPipeline:
                 text = str(item.get("text") or item.get("name") or "").strip()
                 if not text:
                     continue
+                text = redact_pii_text(text)
                 evidence_ids = [
                     str(e).strip()
                     for e in (item.get("evidence_ids") or [])
@@ -2269,18 +2271,55 @@ class TheoryPipeline:
             "consequences",
             "propositions",
         ]
+        evidence_id_catalog: set[str] = set()
+        for ev in evidence_index:
+            if not isinstance(ev, dict):
+                continue
+            fid = str(ev.get("fragment_id") or ev.get("id") or "").strip()
+            if fid:
+                evidence_id_catalog.add(fid)
+        evidence_catalog_available = len(evidence_id_catalog) > 0
+
         claims_by_section: Dict[str, int] = {}
         claims_count = 0
         claims_without_evidence = 0
+        claims_with_resolved_evidence = 0
+        claims_with_unresolved_evidence = 0
+        unresolved_evidence_examples: list[dict] = []
         for section in claim_sections:
             items = _section_items(section)
             claims_by_section[section] = len(items)
             claims_count += len(items)
-            for item in items:
-                ev = item.get("evidence_ids")
-                valid_ev = [str(x).strip() for x in ev] if isinstance(ev, list) else []
+            for idx, item in enumerate(items):
+                raw_ev = item.get("evidence_ids")
+                valid_ev = [str(x).strip() for x in raw_ev] if isinstance(raw_ev, list) else []
+                single_ev = item.get("evidence_id")
+                if single_ev is not None and str(single_ev).strip():
+                    valid_ev.append(str(single_ev).strip())
+                valid_ev = [x for x in dict.fromkeys(valid_ev) if x]
                 if not valid_ev:
                     claims_without_evidence += 1
+                    continue
+                if evidence_catalog_available:
+                    if any(fid in evidence_id_catalog for fid in valid_ev):
+                        claims_with_resolved_evidence += 1
+                    else:
+                        claims_with_unresolved_evidence += 1
+                        if len(unresolved_evidence_examples) < 5:
+                            unresolved_evidence_examples.append(
+                                {
+                                    "section": section,
+                                    "order": idx,
+                                    "text": str(item.get("text") or item.get("name") or "").strip(),
+                                    "evidence_ids": valid_ev[:8],
+                                }
+                            )
+
+        claims_with_any_evidence = max(0, claims_count - claims_without_evidence)
+        claim_explain_success_count = (
+            claims_with_resolved_evidence if evidence_catalog_available else claims_with_any_evidence
+        )
+        claim_explain_success_rate = round(claim_explain_success_count / max(1, claims_count), 3)
 
         evidence_interviews_covered = len(
             {str(ev.get("interview_id")) for ev in evidence_index if isinstance(ev, dict) and ev.get("interview_id")}
@@ -2320,6 +2359,8 @@ class TheoryPipeline:
             "claims_synced_count": 0,
             "qdrant_sync_failed": False,
         }
+        persist_evidence_max = max(50, int(settings.THEORY_EVIDENCE_INDEX_PERSIST_MAX))
+        evidence_id_catalog_max = max(200, int(settings.THEORY_EVIDENCE_ID_CATALOG_MAX))
 
         new_theory = Theory(
             project_id=project_id,
@@ -2339,12 +2380,21 @@ class TheoryPipeline:
                     "coarse_summary_hits": coarse_summary_hits,
                     "refined_category_count": refined_category_count,
                     "category_summary_vectors_synced": category_summary_vectors_synced,
-                    "evidence_index": evidence_index[: min(200, len(evidence_index))],
+                    "evidence_index": evidence_index[: min(persist_evidence_max, len(evidence_index))],
+                    "evidence_ids": sorted(evidence_id_catalog)[:evidence_id_catalog_max],
+                    "evidence_catalog_size": len(evidence_id_catalog),
                 },
                 "claim_metrics": {
                     "claims_count": claims_count,
                     "claims_by_section": claims_by_section,
                     "claims_without_evidence": claims_without_evidence,
+                    "claims_with_any_evidence": claims_with_any_evidence,
+                    "claims_with_resolved_evidence": claims_with_resolved_evidence,
+                    "claims_with_unresolved_evidence": claims_with_unresolved_evidence,
+                    "unresolved_evidence_examples": unresolved_evidence_examples,
+                    "evidence_catalog_available": evidence_catalog_available,
+                    "claim_explain_success_count": claim_explain_success_count,
+                    "claim_explain_success_rate": claim_explain_success_rate,
                     "evidence_count": evidence_count,
                     "interviews_covered": evidence_interviews_covered,
                 },
@@ -2380,7 +2430,7 @@ class TheoryPipeline:
             },
             gaps=gaps.get("identified_gaps", []),
             confidence_score=paradigm.get("confidence_score", 0.7),
-            generated_by="DeepSeek-V3.2-Speciale/Kimi-K2.5",
+            generated_by=str(settings.MODEL_REASONING_ADVANCED or settings.MODEL_CHAT or "unknown-model"),
             status="completed",
         )
         db.add(new_theory)
@@ -2410,6 +2460,8 @@ class TheoryPipeline:
                         paradigm=paradigm,
                         evidence_index=evidence_index,
                         categories=[(c.id, c.name) for c in categories],
+                        run_id=task_id,
+                        stage="theory_pipeline",
                     ),
                     timeout=max(5, int(settings.CODING_NEO4J_SYNC_TIMEOUT_SECONDS)),
                 )

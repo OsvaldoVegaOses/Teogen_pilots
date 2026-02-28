@@ -6,6 +6,9 @@ from typing import Any, Dict, Iterable, List
 
 from pptx import Presentation
 
+from .executive_framework import build_executive_framework
+from .privacy import redact_pii_text
+
 
 class PptxGenerator:
     @staticmethod
@@ -13,7 +16,7 @@ class PptxGenerator:
         if value is None:
             return ""
         if isinstance(value, (str, int, float, bool)):
-            return str(value)
+            return redact_pii_text(str(value))
         if isinstance(value, list):
             return " | ".join([PptxGenerator._as_text(v) for v in value if v is not None])
         if isinstance(value, dict):
@@ -26,9 +29,9 @@ class PptxGenerator:
             ]
             for item in preferred:
                 if item:
-                    return str(item)
-            return str(value)
-        return str(value)
+                    return redact_pii_text(str(item))
+            return redact_pii_text(str(value))
+        return redact_pii_text(str(value))
 
     @staticmethod
     def _as_bullets(items: Iterable[Any], limit: int = 8) -> List[str]:
@@ -153,11 +156,37 @@ class PptxGenerator:
             self._as_bullets(gaps, limit=12),
         )
 
+        framework = build_executive_framework(theory_data)
+        quality = framework.get("quality_metrics", {}) if isinstance(framework.get("quality_metrics"), dict) else {}
+        self._add_title_content_slide(
+            prs,
+            "Marco de Decision Directiva",
+            [
+                f"- Recomendacion: {framework.get('recommendation', 'PILOT')}",
+                f"- Claims: {quality.get('claims_count', 0)}",
+                f"- Claims sin evidencia: {quality.get('claims_without_evidence', 0)}",
+                f"- Brechas altas: {quality.get('gaps_high', 0)}",
+                f"- Judge warn-only: {quality.get('judge_warn_only', False)}",
+            ] + self._as_bullets(framework.get("reasons", []), limit=6),
+        )
+
         evidence_lines = self._flatten_evidence(theory_data, limit=10)
         self._add_title_content_slide(
             prs,
             "Evidencia Relevante",
             evidence_lines or ["- No se registraron fragmentos de evidencia en validacion."],
+        )
+
+        self._add_title_content_slide(
+            prs,
+            "Plan de Accion (90 dias)",
+            self._as_bullets(framework.get("action_plan", []), limit=8),
+        )
+
+        self._add_title_content_slide(
+            prs,
+            "Limites y Supuestos",
+            self._as_bullets(framework.get("limitations", []), limit=8),
         )
 
         self._add_title_content_slide(

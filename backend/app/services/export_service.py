@@ -11,6 +11,9 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .export.executive_framework import build_executive_framework
+from .export.privacy import redact_pii_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +34,10 @@ I18N = {
         "actions": "Acciones/Interacciones",
         "consequences": "Consecuencias",
         "gaps_found": "Brechas Identificadas",
+        "decision_framework": "Marco de Decision Directiva",
+        "action_plan": "Plan de Accion (90 dias)",
+        "limitations": "Limites y Supuestos",
+        "recommendation": "Recomendacion",
     },
     "en": {
         "report_title": "Grounded Theory Report",
@@ -48,6 +55,10 @@ I18N = {
         "actions": "Actions/Interactions",
         "consequences": "Consequences",
         "gaps_found": "Identified Gaps",
+        "decision_framework": "Executive Decision Framework",
+        "action_plan": "Action Plan (90 days)",
+        "limitations": "Limits and Assumptions",
+        "recommendation": "Recommendation",
     },
 }
 
@@ -141,7 +152,8 @@ class ExportService:
             if not s:
                 return s
             # Keep \t, \n, \r but strip other low ASCII controls.
-            return _CONTROL_CHARS_RE.sub("", s)
+            cleaned = _CONTROL_CHARS_RE.sub("", s)
+            return redact_pii_text(cleaned)
 
         def _to_text(val: Any) -> str:
             if val is None:
@@ -333,6 +345,28 @@ class ExportService:
                 raw_text = gap if isinstance(gap, str) else (gap.get("description") if isinstance(gap, dict) else gap)
                 text = _to_text(raw_text)
                 elements.append(_to_para(f"- {text}", "TheoGenBody"))
+
+        framework = build_executive_framework(theory_data)
+        elements.append(Spacer(1, 18))
+        elements.append(Paragraph(texts["decision_framework"], self.styles["TheoGenSection"]))
+        elements.append(
+            _to_para(
+                f"{texts['recommendation']}: {framework.get('recommendation', 'PILOT')}",
+                "TheoGenBody",
+            )
+        )
+        reason_lines = [f"- {line}" for line in (framework.get("reasons") or [])]
+        elements.append(_to_lines_para(reason_lines, "TheoGenBody"))
+
+        elements.append(Spacer(1, 14))
+        elements.append(Paragraph(texts["action_plan"], self.styles["TheoGenSubSection"]))
+        plan_lines = [f"{idx}. {line}" for idx, line in enumerate((framework.get("action_plan") or []), start=1)]
+        elements.append(_to_lines_para(plan_lines, "TheoGenBody"))
+
+        elements.append(Spacer(1, 14))
+        elements.append(Paragraph(texts["limitations"], self.styles["TheoGenSubSection"]))
+        limitation_lines = [f"- {line}" for line in (framework.get("limitations") or [])]
+        elements.append(_to_lines_para(limitation_lines, "TheoGenBody"))
 
         doc.build(elements)
         buffer.seek(0)

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { getGoogleToken } from "@/lib/googleAuth";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/sessionProfile";
 import { DASHBOARD_UPDATES, DASHBOARD_UPDATES_VERSION } from "@/lib/dashboardUpdates";
 
-const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research"] as const;
+const DOMAIN_TEMPLATES = ["generic", "education", "ngo", "government", "market_research", "b2c", "consulting"] as const;
 type DomainTemplate = typeof DOMAIN_TEMPLATES[number];
 type DashboardTab = "overview" | "codes" | "interviews" | "memos" | "assistant_ops";
 type TheoryViewerStateSnapshot = {
@@ -76,9 +76,9 @@ type TheorySummary = TheoryViewerTheory & { status?: string };
 
 const SEGMENT_PRESETS: Record<string, SegmentPreset> = {
     educacion: {
-        label: "Educación",
+        label: "EducaciÃ³n",
         domainTemplate: "education",
-        suggestedName: "Piloto Educación",
+        suggestedName: "Piloto EducaciÃ³n",
         suggestedDescription: "Proyecto enfocado en experiencia educativa y engagement con apoderados.",
     },
     ong: {
@@ -91,25 +91,25 @@ const SEGMENT_PRESETS: Record<string, SegmentPreset> = {
         label: "Estudio de Mercado",
         domainTemplate: "market_research",
         suggestedName: "Piloto Estudio de Mercado",
-        suggestedDescription: "Proyecto para acelerar análisis cualitativo y mejorar margen operativo.",
+        suggestedDescription: "Proyecto para acelerar anÃ¡lisis cualitativo y mejorar margen operativo.",
     },
     b2c: {
         label: "B2C",
-        domainTemplate: "generic",
+        domainTemplate: "b2c",
         suggestedName: "Piloto B2C",
-        suggestedDescription: "Proyecto para mejorar servicio al cliente y fortalecer retención.",
+        suggestedDescription: "Proyecto para mejorar servicio al cliente y fortalecer retenciÃ³n.",
     },
     consultoria: {
-        label: "Consultoría",
-        domainTemplate: "generic",
-        suggestedName: "Piloto Consultoría",
+        label: "ConsultorÃ­a",
+        domainTemplate: "consulting",
+        suggestedName: "Piloto ConsultorÃ­a",
         suggestedDescription: "Proyecto para diferenciar entregables y acelerar tiempos de entrega.",
     },
     "sector-publico": {
-        label: "Sector Público",
+        label: "Sector PÃºblico",
         domainTemplate: "government",
-        suggestedName: "Piloto Sector Público",
-        suggestedDescription: "Proyecto para participación ciudadana y transparencia institucional.",
+        suggestedName: "Piloto Sector PÃºblico",
+        suggestedDescription: "Proyecto para participaciÃ³n ciudadana y transparencia institucional.",
     },
 };
 
@@ -260,7 +260,7 @@ export default function Dashboard() {
     const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>({
         name: "",
         domainTemplate: "generic",
-        description: "Proyecto de investigación",
+        description: "Proyecto de investigaciÃ³n",
     });
     const [editProjectForm, setEditProjectForm] = useState<CreateProjectFormState>({
         name: "",
@@ -601,7 +601,7 @@ export default function Dashboard() {
         setCreateProjectForm({
             name: selectedPreset?.suggestedName || "",
             domainTemplate: selectedPreset?.domainTemplate || "generic",
-            description: selectedPreset?.suggestedDescription || "Proyecto de investigación",
+            description: selectedPreset?.suggestedDescription || "Proyecto de investigaciÃ³n",
         });
         setShowCreateProjectModal(true);
     }
@@ -621,7 +621,7 @@ export default function Dashboard() {
                 method: "POST",
                 body: JSON.stringify({
                     name,
-                    description: createProjectForm.description.trim() || "Proyecto de investigación",
+                    description: createProjectForm.description.trim() || "Proyecto de investigaciÃ³n",
                     methodological_profile: "constructivist",
                     domain_template: createProjectForm.domainTemplate,
                     language: "es"
@@ -639,7 +639,7 @@ export default function Dashboard() {
             }
         } catch (error) {
             console.error("Creation error:", error);
-                setCreateProjectError("Error de conexión al crear proyecto.");
+                setCreateProjectError("Error de conexiÃ³n al crear proyecto.");
         } finally {
             setCreatingProject(false);
         }
@@ -688,7 +688,7 @@ export default function Dashboard() {
             setShowEditProjectModal(false);
         } catch (error) {
             console.error("Project update error:", error);
-            setEditProjectError("Error de conexión al actualizar proyecto.");
+            setEditProjectError("Error de conexiÃ³n al actualizar proyecto.");
         } finally {
             setEditingProject(false);
         }
@@ -698,24 +698,24 @@ export default function Dashboard() {
         queued:        "En cola...",
         pipeline_start:"Iniciando pipeline...",
         load_project:  "Cargando proyecto...",
-        load_categories: "Cargando categorías...",
+        load_categories: "Cargando categorÃ­as...",
         auto_code:     "Auto-codificando entrevistas...",
-        neo4j_taxonomy_sync: "Sincronizando taxonomía en Neo4j...",
-        network_metrics: "Calculando métricas de red...",
-        semantic_evidence: "Recuperando evidencia semántica...",
-        identify_central_category: "Identificando categoría central...",
+        neo4j_taxonomy_sync: "Sincronizando taxonomÃ­a en Neo4j...",
+        network_metrics: "Calculando mÃ©tricas de red...",
+        semantic_evidence: "Recuperando evidencia semÃ¡ntica...",
+        identify_central_category: "Identificando categorÃ­a central...",
         build_straussian_paradigm: "Construyendo paradigma...",
-        analyze_saturation_and_gaps: "Analizando brechas y saturación...",
-        save_theory:   "Guardando teoría...",
+        analyze_saturation_and_gaps: "Analizando brechas y saturaciÃ³n...",
+        save_theory:   "Guardando teorÃ­a...",
         coding:        "Codificando fragmentos de entrevistas...",
-        coding_done:   "Codificación completada",
-        embeddings:    "Generando embeddings semánticos...",
+        coding_done:   "CodificaciÃ³n completada",
+        embeddings:    "Generando embeddings semÃ¡nticos...",
         neo4j:         "Sincronizando grafo de conocimiento...",
-        theory_engine: "Construyendo teoría fundada...",
-        categories:    "Analizando categorías emergentes...",
-        saturation:    "Verificando saturación teórica...",
-        saving:        "Guardando teoría en base de datos...",
-        completed:     "Teoría completada",
+        theory_engine: "Construyendo teorÃ­a fundada...",
+        categories:    "Analizando categorÃ­as emergentes...",
+        saturation:    "Verificando saturaciÃ³n teÃ³rica...",
+        saving:        "Guardando teorÃ­a en base de datos...",
+        completed:     "TeorÃ­a completada",
         failed:        "Pipeline terminado con error",
     };
 
@@ -745,7 +745,7 @@ export default function Dashboard() {
         try {
             const { apiClient } = await import("@/lib/api");
 
-            // 1. Enqueue — returns 202 with task_id immediately
+            // 1. Enqueue â€” returns 202 with task_id immediately
             const enqueueResp = await apiClient(`/projects/${selectedProjectId}/generate-theory`, {
                 method: "POST",
                 body: JSON.stringify({
@@ -756,7 +756,7 @@ export default function Dashboard() {
 
             if (!enqueueResp.ok) {
                 const err = await enqueueResp.json().catch(() => ({}));
-                setTheoryMessage(err.detail || "No se pudo iniciar la generación.");
+                setTheoryMessage(err.detail || "No se pudo iniciar la generaciÃ³n.");
                 setGeneratingTheory(false);
                 return;
             }
@@ -808,7 +808,7 @@ export default function Dashboard() {
                         return;
                     }
                     if (taskData.status === "failed") {
-                        const errMsg = taskData.error || "La generación falló.";
+                        const errMsg = taskData.error || "La generaciÃ³n fallÃ³.";
                         setTheoryFailed(true);
                         setTheoryMessage(errMsg);
                         const ts = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -819,7 +819,7 @@ export default function Dashboard() {
                     }
                     if (attempts >= maxAttempts) {
                         setTheoryFailed(true);
-                        setTheoryMessage("Tiempo de espera agotado (10 min). El proceso continúa en segundo plano.");
+                        setTheoryMessage("Tiempo de espera agotado (10 min). El proceso continÃºa en segundo plano.");
                         setGeneratingTheory(false);
                         return;
                     }
@@ -837,7 +837,7 @@ export default function Dashboard() {
                         setTimeout(poll, retryDelay);
                     } else {
                         setTheoryFailed(true);
-                        setTheoryMessage("Error de conexión al consultar estado. Intenta refrescar la página.");
+                        setTheoryMessage("Error de conexiÃ³n al consultar estado. Intenta refrescar la pÃ¡gina.");
                         setGeneratingTheory(false);
                     }
                 }
@@ -847,7 +847,7 @@ export default function Dashboard() {
         } catch (error) {
             console.error("Error generating theory:", error);
             setTheoryFailed(true);
-            setTheoryMessage("Error de conexión al generar teoría.");
+            setTheoryMessage("Error de conexiÃ³n al generar teorÃ­a.");
             setGeneratingTheory(false);
         }
     }
@@ -889,7 +889,7 @@ export default function Dashboard() {
                         disabled={!selectedProjectId}
                         className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        Libro de Códigos
+                        Libro de CÃ³digos
                     </button>
                     <button
                         onClick={() => setActiveTab("interviews")}
@@ -960,7 +960,7 @@ export default function Dashboard() {
                         disabled={!selectedProjectId}
                         className={`flex items-center gap-3 rounded-xl p-3 font-medium transition-colors ${activeTab === 'codes' ? 'bg-zinc-100 text-indigo-600 dark:bg-zinc-900/50' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300'} ${!selectedProjectId ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        Libro de Códigos
+                        Libro de CÃ³digos
                     </button>
                     <button
                         onClick={() => {
@@ -1014,7 +1014,7 @@ export default function Dashboard() {
                             </button>
                             <h1 className="text-2xl font-bold dark:text-white">
                                 {activeTab === "overview" && "Panel de Control"}
-                                {activeTab === "codes" && "Exploración de Conceptos"}
+                                {activeTab === "codes" && "ExploraciÃ³n de Conceptos"}
                                 {activeTab === "interviews" && "Entrevistas"}
                                 {activeTab === "memos" && "Memos Analiticos"}
                                 {activeTab === "assistant_ops" && canViewAssistantOps && "Operaciones del Asistente"}
@@ -1113,7 +1113,7 @@ export default function Dashboard() {
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                     <p className="text-sm text-indigo-800 dark:text-indigo-300">
                                     Contexto aplicado: <span className="font-semibold">{segmentPreset.label}</span>.
-                                    Puedes iniciar un proyecto con plantilla y descripción sugeridas.
+                                    Puedes iniciar un proyecto con plantilla y descripciÃ³n sugeridas.
                                 </p>
                                 <button
                                     onClick={() => openCreateProjectModal(segmentPreset)}
@@ -1165,7 +1165,7 @@ export default function Dashboard() {
                                             onClick={() => openCreateProjectModal(segmentPreset)}
                                             className="text-indigo-600 font-bold hover:underline"
                                         >
-                                            Crear tu primer proyecto de investigación
+                                            Crear tu primer proyecto de investigaciÃ³n
                                         </button>
                                     </div>
                                 ) : (
@@ -1177,16 +1177,16 @@ export default function Dashboard() {
                                         >
                                             <div className="flex items-start justify-between mb-4">
                                                 <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">Active</span>
-                                                <span className="text-2xl">•</span>
+                                                <span className="text-2xl">â€¢</span>
                                             </div>
                                             <h3 className="text-xl font-bold dark:text-white truncate" title={project.name}>{project.name}</h3>
-                                            <p className="mt-2 text-sm text-zinc-500 line-clamp-2">{project.description || "Sin descripción"}</p>
+                                            <p className="mt-2 text-sm text-zinc-500 line-clamp-2">{project.description || "Sin descripciÃ³n"}</p>
 
                                             {/* Progress Bar (Hidden if no saturation data) */}
                                             {project.saturation_score !== undefined && (
                                                 <div className="mt-6">
                                                     <div className="flex justify-between text-xs font-bold mb-2 dark:text-zinc-400">
-                                                        <span>Progreso de Saturación</span>
+                                                        <span>Progreso de SaturaciÃ³n</span>
                                                         <span>{Math.round(project.saturation_score * 100)}%</span>
                                                     </div>
                                                     <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800">
@@ -1240,14 +1240,14 @@ export default function Dashboard() {
                                         />
 
                                         <div className="rounded-3xl bg-indigo-600 p-8 text-white shadow-xl shadow-indigo-500/20">
-                                                                    <h4 className="font-bold mb-2 text-lg">Teorización Assist</h4>
+                                                                    <h4 className="font-bold mb-2 text-lg">TeorizaciÃ³n Assist</h4>
 
                                             {/* Idle */}
                                             {!generatingTheory && !theoryDone && !theoryFailed && (
                                                 <>
                                                     <p className="text-white/80 text-sm mb-6">
                                                         {activeTheory
-                                                                ? "Teoría anterior disponible. Puedes regenerarla con los datos actuales."
+                                                                ? "TeorÃ­a anterior disponible. Puedes regenerarla con los datos actuales."
                                                             : "Analiza los datos del proyecto para buscar patrones emergentes."}
                                                     </p>
                                                     {activeTheory && (
@@ -1256,7 +1256,7 @@ export default function Dashboard() {
                                                                 onClick={() => setTimeout(() => document.getElementById("theory-viewer")?.scrollIntoView({ behavior: "smooth" }), 50)}
                                                                 className="flex-1 rounded-xl bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
                                                             >
-                                                                Ver Teoría
+                                                                Ver TeorÃ­a
                                                             </button>
                                                             <button
                                                                 onClick={handleExportTheory}
@@ -1270,12 +1270,12 @@ export default function Dashboard() {
                                                         className="w-full rounded-xl bg-white py-3 text-sm font-bold text-indigo-600 shadow-lg transition-all hover:bg-indigo-50 active:scale-98"
                                                         onClick={handleGenerateTheory}
                                                     >
-                                                        {activeTheory ? "Regenerar Teoría" : "Generar Teoría (v1.2)"}
+                                                        {activeTheory ? "Regenerar TeorÃ­a" : "Generar TeorÃ­a (v1.2)"}
                                                     </button>
                                                 </>
                                             )}
 
-                                            {/* Barra de progreso de generación */}
+                                            {/* Barra de progreso de generaciÃ³n */}
                                             {generatingTheory && (
                                                 <div>
                                                     <p className="text-white/80 text-sm mb-3">
@@ -1290,7 +1290,7 @@ export default function Dashboard() {
                                                             className="h-2 w-full overflow-hidden rounded-full"
                                                             max={100}
                                                             value={taskProgress ?? 0}
-                                                            aria-label="Progreso de generación de teoría"
+                                                            aria-label="Progreso de generaciÃ³n de teorÃ­a"
                                                         />
                                                     </div>
                                                     {currentTaskId && (
@@ -1312,14 +1312,14 @@ export default function Dashboard() {
                                             {theoryDone && (
                                                 <div>
                                                     <p className="text-white/90 text-sm mb-4">
-                                                        … Teoría generada. Lista para revisar y exportar.
+                                                        â€¦ TeorÃ­a generada. Lista para revisar y exportar.
                                                     </p>
                                                     <div className="flex gap-2 mb-2">
                                                         <button
                                                             onClick={() => setTimeout(() => document.getElementById("theory-viewer")?.scrollIntoView({ behavior: "smooth" }), 50)}
                                                             className="flex-1 rounded-xl bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-all"
                                                         >
-                                                            Ver Teoría
+                                                            Ver TeorÃ­a
                                                         </button>
                                                         <button
                                                             onClick={handleExportTheory}
@@ -1340,7 +1340,7 @@ export default function Dashboard() {
                                             {/* Failed */}
                                             {theoryFailed && (
                                                 <div>
-                                                    <p className="text-white font-semibold text-sm mb-2">La generación falló.</p>
+                                                    <p className="text-white font-semibold text-sm mb-2">La generaciÃ³n fallÃ³.</p>
                                                     {theoryMessage && (
                                                         <div className="mb-3 bg-black/30 rounded-lg p-2 max-h-28 overflow-y-auto">
                                                             <p className="text-xs font-mono text-red-200 break-all leading-relaxed whitespace-pre-wrap">{theoryMessage}</p>
@@ -1389,9 +1389,9 @@ export default function Dashboard() {
                                                 <div className="min-w-0">
                                                     <h4 className="font-bold text-sm dark:text-white truncate">{iv.participant_pseudonym || iv.id}</h4>
                                                     <p className="text-xs text-zinc-500">
-                                                        {iv.transcription_method || 'sin transcripción'}
-                                                        {iv.word_count ? ` · ${iv.word_count} palabras` : ''}
-                                                        {iv.language ? ` · ${iv.language}` : ''}
+                                                        {iv.transcription_method || 'sin transcripciÃ³n'}
+                                                        {iv.word_count ? ` Â· ${iv.word_count} palabras` : ''}
+                                                        {iv.language ? ` Â· ${iv.language}` : ''}
                                                     </p>
                                                 </div>
                                                 <div className="flex gap-2 ml-4">
@@ -1404,7 +1404,7 @@ export default function Dashboard() {
                                                         onClick={() => setOpenInterviewId(iv.id)}
                                                         className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg px-3 py-1"
                                                     >
-                                                        Ver transcripción
+                                                        Ver transcripciÃ³n
                                                     </button>
                                                     <button
                                                         onClick={async () => {
@@ -1495,10 +1495,12 @@ export default function Dashboard() {
                                     <option value="ngo">ngo</option>
                                     <option value="government">government</option>
                                     <option value="market_research">market_research</option>
+                                    <option value="b2c">b2c</option>
+                                    <option value="consulting">consulting</option>
                                 </select>
                             </div>
                             <div>
-                                <label htmlFor="create-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Descripción</label>
+                                <label htmlFor="create-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">DescripciÃ³n</label>
                                 <textarea
                                     id="create-project-description"
                                     value={createProjectForm.description}
@@ -1592,7 +1594,7 @@ export default function Dashboard() {
                     <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
                         <h3 className="text-lg font-bold dark:text-white">Editar proyecto</h3>
                         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                            Actualiza nombre, plantilla y descripción del proyecto.
+                            Actualiza nombre, plantilla y descripciÃ³n del proyecto.
                         </p>
                         <div className="mt-5 space-y-4">
                             <div>
@@ -1621,10 +1623,12 @@ export default function Dashboard() {
                                     <option value="ngo">ngo</option>
                                     <option value="government">government</option>
                                     <option value="market_research">market_research</option>
+                                    <option value="b2c">b2c</option>
+                                    <option value="consulting">consulting</option>
                                 </select>
                             </div>
                             <div>
-                                <label htmlFor="edit-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Descripción</label>
+                                <label htmlFor="edit-project-description" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">DescripciÃ³n</label>
                                 <textarea
                                     id="edit-project-description"
                                     value={editProjectForm.description}
@@ -1662,14 +1666,14 @@ export default function Dashboard() {
                     <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
                         <h3 className="text-lg font-bold dark:text-white">Reset estado UI</h3>
                         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                            Elige qué estado persistido quieres limpiar.
+                            Elige quÃ© estado persistido quieres limpiar.
                         </p>
                         <div className="mt-5 space-y-2">
                             <button
                                 onClick={() => handleResetUiAction("active_theory")}
                                 className="w-full rounded-xl border border-zinc-200 px-4 py-2 text-left text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
                             >
-                                Solo teoría activa
+                                Solo teorÃ­a activa
                             </button>
                             <button
                                 onClick={() => handleResetUiAction("dashboard_ui")}
@@ -1681,7 +1685,7 @@ export default function Dashboard() {
                                 onClick={() => handleResetUiAction("all")}
                                 className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-left text-sm font-bold text-amber-800 hover:bg-amber-100"
                             >
-                                Todo (UI + teoría)
+                                Todo (UI + teorÃ­a)
                             </button>
                         </div>
                         <div className="mt-5 flex justify-end">
@@ -1699,5 +1703,6 @@ export default function Dashboard() {
         </div>
     );
 }
+
 
 

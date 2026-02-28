@@ -1,6 +1,7 @@
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
@@ -72,8 +73,31 @@ class FoundryNeo4jService:
             "label": label
         })
 
-    async def create_fragment_node(self, project_id: UUID, fragment_id: UUID, text_snippet: str):
-        """MERGE (f:Fragment {id: fragment_id}) LINKED TO (p:Project)."""
+    async def create_interview_node(self, project_id: UUID, interview_id: UUID):
+        """MERGE (i:Interview {id: interview_id}) LINKED TO (p:Project)."""
+        if not self.enabled: return
+
+        query = """
+        MERGE (p:Project {id: $project_id})
+        MERGE (i:Interview {id: $interview_id})
+        SET i.project_id = $project_id
+        MERGE (p)-[:HAS_INTERVIEW]->(i)
+        RETURN i
+        """
+        await self._execute_write(query, {
+            "project_id": str(project_id),
+            "interview_id": str(interview_id),
+        })
+
+    async def create_fragment_node(
+        self,
+        project_id: UUID,
+        fragment_id: UUID,
+        text_snippet: str,
+        *,
+        interview_id: UUID | None = None,
+    ):
+        """MERGE (f:Fragment {id}) linked to Project (+Interview when available)."""
         if not self.enabled: return
 
         query = """
@@ -81,26 +105,58 @@ class FoundryNeo4jService:
         MERGE (f:Fragment {id: $fragment_id})
         SET f.text_snippet = $text_snippet, f.project_id = $project_id
         MERGE (p)-[:HAS_FRAGMENT]->(f)
+        WITH p, f
+        FOREACH (_ IN CASE WHEN $interview_id IS NULL THEN [] ELSE [1] END |
+            MERGE (i:Interview {id: $interview_id})
+            SET i.project_id = $project_id
+            MERGE (p)-[:HAS_INTERVIEW]->(i)
+            MERGE (i)-[:HAS_FRAGMENT]->(f)
+        )
         RETURN f
         """
         await self._execute_write(query, {
             "project_id": str(project_id),
             "fragment_id": str(fragment_id),
-            "text_snippet": text_snippet[:50]  # Only store snippet
+            "text_snippet": text_snippet[:50],  # Only store snippet
+            "interview_id": str(interview_id) if interview_id else None,
         })
 
-    async def create_code_fragment_relation(self, code_id: UUID, fragment_id: UUID):
-        """(c:Code)-[:APPLIES_TO]->(f:Fragment)."""
+    async def create_code_fragment_relation(
+        self,
+        code_id: UUID,
+        fragment_id: UUID,
+        *,
+        confidence: float | None = None,
+        source: str | None = None,
+        run_id: str | None = None,
+        ts: str | None = None,
+        char_start: int | None = None,
+        char_end: int | None = None,
+    ):
+        """(c:Code)-[:APPLIES_TO]->(f:Fragment) + (c)-[:CODED_AS]->(f)."""
         if not self.enabled: return
 
         query = """
         MATCH (c:Code {id: $code_id})
         MATCH (f:Fragment {id: $fragment_id})
         MERGE (c)-[:APPLIES_TO]->(f)
+        MERGE (c)-[rel:CODED_AS]->(f)
+        SET rel.confidence = $confidence,
+            rel.source = $source,
+            rel.run_id = $run_id,
+            rel.ts = $ts,
+            rel.char_start = $char_start,
+            rel.char_end = $char_end
         """
         await self._execute_write(query, {
             "code_id": str(code_id),
-            "fragment_id": str(fragment_id)
+            "fragment_id": str(fragment_id),
+            "confidence": confidence,
+            "source": source,
+            "run_id": run_id,
+            "ts": ts,
+            "char_start": char_start,
+            "char_end": char_end,
         })
 
     async def create_category_node(self, project_id: UUID, category_id: UUID, name: str):
@@ -185,40 +241,72 @@ class FoundryNeo4jService:
     async def batch_sync_interview(
         self,
         project_id: UUID,
-        fragments: list[tuple[UUID, str]],          # [(fragment_id, text), ...]
-        codes_cache: dict,                           # {label: Code object}
-        fragment_code_pairs: list[tuple[UUID, UUID]], # [(fragment_id, code_id), ...]
+        interview_id: UUID | None,
+        fragments: list[tuple[UUID, str]],
+        codes_cache: dict,
+        fragment_code_pairs: list[tuple[UUID, UUID]],
+        code_edge_rows: list[dict[str, Any]] | None = None,
     ):
         """
-        Syncs an entire interview to Neo4j in 3 UNWIND queries instead of
-        O(fragments × codes) individual round-trips.
+        V2 sync:
+        - Materializes Interview nodes/links.
+        - Keeps APPLIES_TO compatibility.
+        - Adds auditable CODED_AS edges with coding metadata.
         """
         if not self.enabled or not self.driver:
             return
 
         pid = str(project_id)
+        iid = str(interview_id) if interview_id else None
+        now_iso = datetime.utcnow().isoformat()
         async with self.driver.session() as session:
-            # 1. Batch fragment nodes
-            if fragments:
+            if iid:
                 await self._run(
                     session,
                     """
-                    UNWIND $frags AS f
                     MERGE (proj:Project {id: $pid})
-                    MERGE (fr:Fragment {id: f.id})
-                    SET fr.text_snippet = f.snippet, fr.project_id = $pid
-                    MERGE (proj)-[:HAS_FRAGMENT]->(fr)
+                    MERGE (iv:Interview {id: $iid})
+                    SET iv.project_id = $pid
+                    MERGE (proj)-[:HAS_INTERVIEW]->(iv)
                     """,
-                    {
-                        "pid": pid,
-                        "frags": [
-                            {"id": str(fid), "snippet": text[:50]}
-                            for fid, text in fragments
-                        ],
-                    },
+                    {"pid": pid, "iid": iid},
                 )
 
-            # 2. Batch code nodes (whole project cache — idempotent MERGE)
+            if fragments:
+                if iid:
+                    await self._run(
+                        session,
+                        """
+                        UNWIND $frags AS f
+                        MERGE (proj:Project {id: $pid})
+                        MATCH (iv:Interview {id: $iid})
+                        MERGE (fr:Fragment {id: f.id})
+                        SET fr.text_snippet = f.snippet, fr.project_id = $pid
+                        MERGE (proj)-[:HAS_FRAGMENT]->(fr)
+                        MERGE (iv)-[:HAS_FRAGMENT]->(fr)
+                        """,
+                        {
+                            "pid": pid,
+                            "iid": iid,
+                            "frags": [{"id": str(fid), "snippet": text[:50]} for fid, text in fragments],
+                        },
+                    )
+                else:
+                    await self._run(
+                        session,
+                        """
+                        UNWIND $frags AS f
+                        MERGE (proj:Project {id: $pid})
+                        MERGE (fr:Fragment {id: f.id})
+                        SET fr.text_snippet = f.snippet, fr.project_id = $pid
+                        MERGE (proj)-[:HAS_FRAGMENT]->(fr)
+                        """,
+                        {
+                            "pid": pid,
+                            "frags": [{"id": str(fid), "snippet": text[:50]} for fid, text in fragments],
+                        },
+                    )
+
             if codes_cache:
                 await self._run(
                     session,
@@ -231,15 +319,47 @@ class FoundryNeo4jService:
                     """,
                     {
                         "pid": pid,
-                        "codes": [
-                            {"id": str(obj.id), "label": label}
-                            for label, obj in codes_cache.items()
-                        ],
+                        "codes": [{"id": str(obj.id), "label": label} for label, obj in codes_cache.items()],
                     },
                 )
 
-            # 3. Batch code→fragment relations
-            if fragment_code_pairs:
+            rows: list[dict[str, Any]] = []
+            if code_edge_rows:
+                for row in code_edge_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    code_id = str(row.get("code_id") or "").strip()
+                    frag_id = str(row.get("frag_id") or row.get("fragment_id") or "").strip()
+                    if not code_id or not frag_id:
+                        continue
+                    rows.append(
+                        {
+                            "code_id": code_id,
+                            "frag_id": frag_id,
+                            "confidence": row.get("confidence"),
+                            "source": row.get("source"),
+                            "run_id": row.get("run_id"),
+                            "ts": row.get("ts") or now_iso,
+                            "char_start": row.get("char_start"),
+                            "char_end": row.get("char_end"),
+                        }
+                    )
+            elif fragment_code_pairs:
+                rows = [
+                    {
+                        "code_id": str(cid),
+                        "frag_id": str(fid),
+                        "confidence": None,
+                        "source": None,
+                        "run_id": None,
+                        "ts": now_iso,
+                        "char_start": None,
+                        "char_end": None,
+                    }
+                    for fid, cid in fragment_code_pairs
+                ]
+
+            if rows:
                 await self._run(
                     session,
                     """
@@ -247,13 +367,15 @@ class FoundryNeo4jService:
                     MATCH (c:Code {id: p.code_id})
                     MATCH (f:Fragment {id: p.frag_id})
                     MERGE (c)-[:APPLIES_TO]->(f)
+                    MERGE (c)-[rel:CODED_AS]->(f)
+                    SET rel.confidence = p.confidence,
+                        rel.source = p.source,
+                        rel.run_id = p.run_id,
+                        rel.ts = p.ts,
+                        rel.char_start = p.char_start,
+                        rel.char_end = p.char_end
                     """,
-                    {
-                        "pairs": [
-                            {"code_id": str(cid), "frag_id": str(fid)}
-                            for fid, cid in fragment_code_pairs
-                        ]
-                    },
+                    {"pairs": rows},
                 )
 
     async def batch_sync_claims(
@@ -265,6 +387,8 @@ class FoundryNeo4jService:
         paradigm: Dict[str, Any],
         evidence_index: List[Dict[str, Any]],
         categories: list[tuple[UUID, str]],
+        run_id: str | None = None,
+        stage: str | None = "theory_generation",
     ) -> None:
         """
         Best-effort: persist auditable theory units as Claim nodes with SUPPORTED_BY edges.
@@ -314,6 +438,9 @@ class FoundryNeo4jService:
         claims: list[dict] = []
         about_rows: list[dict] = []
         support_rows: list[dict] = []
+        contradict_rows: list[dict] = []
+        run_id_norm = str(run_id).strip() if run_id else None
+        stage_norm = str(stage).strip() if stage else "theory_generation"
 
         def _push_section(section: str, claim_type: str, text_key: str = "name") -> None:
             for i, item in enumerate(_items(section)):
@@ -329,6 +456,8 @@ class FoundryNeo4jService:
                         "order": i,
                         "text": text[:2000],
                         "created_at": now_iso,
+                        "run_id": run_id_norm,
+                        "stage": stage_norm,
                     }
                 )
 
@@ -345,6 +474,28 @@ class FoundryNeo4jService:
                         if not frag_id:
                             continue
                         support_rows.append(
+                            {
+                                "claim_id": cid,
+                                "fragment_id": frag_id,
+                                "rank": rank,
+                                "score": evidence_score_by_fragment.get(frag_id, 0.0),
+                            }
+                        )
+                        rank += 1
+
+                contra_ids = (
+                    item.get("counter_evidence_ids")
+                    or item.get("contradicted_by_ids")
+                    or item.get("contrast_evidence_ids")
+                    or []
+                )
+                if isinstance(contra_ids, list):
+                    rank = 0
+                    for fid in contra_ids:
+                        frag_id = str(fid).strip()
+                        if not frag_id:
+                            continue
+                        contradict_rows.append(
                             {
                                 "claim_id": cid,
                                 "fragment_id": frag_id,
@@ -379,7 +530,9 @@ class FoundryNeo4jService:
                     cl.section = c.section,
                     cl.`order` = c.order,
                     cl.text = c.text,
-                    cl.created_at = c.created_at
+                    cl.created_at = c.created_at,
+                    cl.run_id = c.run_id,
+                    cl.stage = c.stage
                 MERGE (p)-[:HAS_CLAIM]->(cl)
                 """,
                 {"pid": pid, "tid": tid, "oid": oid, "claims": claims},
@@ -411,6 +564,52 @@ class FoundryNeo4jService:
                     {"rows": support_rows},
                 )
 
+            if contradict_rows:
+                await self._run(
+                    session,
+                    """
+                    UNWIND $rows AS r
+                    MATCH (cl:Claim {id: r.claim_id})
+                    MATCH (f:Fragment {id: r.fragment_id})
+                    MERGE (cl)-[cb:CONTRADICTED_BY]->(f)
+                    SET cb.rank = r.rank,
+                        cb.score = r.score
+                    """,
+                    {"rows": contradict_rows},
+                )
+
+    async def _materialize_category_cooccurrence(self, project_id: str) -> None:
+        """
+        Materialize Category-[:CO_OCCURS_WITH] edges from coded fragment overlap.
+        """
+        if not self.enabled or not self.driver:
+            return
+        now_iso = datetime.utcnow().isoformat()
+        query = """
+        MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[:CONTAINS]->(:Code)-[:APPLIES_TO]->(f:Fragment)<-[:APPLIES_TO]-(:Code)<-[:CONTAINS]-(c2:Category)
+        WHERE c1.id < c2.id
+        WITH c1, c2, count(DISTINCT f) AS shared
+        WHERE shared > 0
+        WITH c1, c2, shared, toFloat(shared) AS weight
+        MERGE (c1)-[r:CO_OCCURS_WITH]->(c2)
+        SET r.count = shared,
+            r.weight = weight,
+            r.project_id = $project_id,
+            r.updated_at = $updated_at
+        MERGE (c2)-[r2:CO_OCCURS_WITH]->(c1)
+        SET r2.count = shared,
+            r2.weight = weight,
+            r2.project_id = $project_id,
+            r2.updated_at = $updated_at
+        """
+        await self._execute_write(
+            query,
+            {
+                "project_id": project_id,
+                "updated_at": now_iso,
+            },
+        )
+
     async def _ensure_claim_constraints(self) -> None:
         """
         Best-effort uniqueness constraints for claim graph idempotency.
@@ -425,6 +624,15 @@ class FoundryNeo4jService:
                     CREATE CONSTRAINT claim_id_unique IF NOT EXISTS
                     FOR (cl:Claim)
                     REQUIRE cl.id IS UNIQUE
+                    """,
+                    {},
+                )
+                await self._run(
+                    session,
+                    """
+                    CREATE CONSTRAINT interview_id_unique IF NOT EXISTS
+                    FOR (iv:Interview)
+                    REQUIRE iv.id IS UNIQUE
                     """,
                     {},
                 )
@@ -447,6 +655,10 @@ class FoundryNeo4jService:
             raise RuntimeError("Neo4j service is not enabled")
 
         project_id_str = str(project_id)
+        try:
+            await self._materialize_category_cooccurrence(project_id_str)
+        except Exception as e:
+            logger.warning("Neo4j cooccurrence materialization skipped: %s", str(e)[:300])
 
         counts_query = """
         MATCH (p:Project {id: $project_id})
@@ -467,11 +679,12 @@ class FoundryNeo4jService:
         """
 
         cooccurrence_query = """
-        MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[:CONTAINS]->(:Code)-[:APPLIES_TO]->(f:Fragment)<-[:APPLIES_TO]-(:Code)<-[:CONTAINS]-(c2:Category)
+        MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[co:CO_OCCURS_WITH]->(c2:Category)
         WHERE c1.id < c2.id
+          AND co.project_id = $project_id
         RETURN c1.id AS category_a_id, c1.name AS category_a_name,
                c2.id AS category_b_id, c2.name AS category_b_name,
-               count(DISTINCT f) AS shared_fragments
+               co.count AS shared_fragments
         ORDER BY shared_fragments DESC
         """
 
@@ -503,10 +716,9 @@ class FoundryNeo4jService:
                 RETURN id(cat) AS id, cat.id AS category_id, cat.name AS category_name
                 """
                 rel_query = """
-                MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[:CONTAINS]->(:Code)-[:APPLIES_TO]->(f:Fragment)<-[:APPLIES_TO]-(:Code)<-[:CONTAINS]-(c2:Category)
-                WHERE id(c1) < id(c2)
-                WITH id(c1) AS source, id(c2) AS target, count(DISTINCT f) AS weight
-                RETURN source, target, toFloat(weight) AS weight
+                MATCH (:Project {id: $project_id})-[:HAS_CATEGORY]->(c1:Category)-[co:CO_OCCURS_WITH]->(c2:Category)
+                WHERE id(c1) < id(c2) AND co.project_id = $project_id
+                RETURN id(c1) AS source, id(c2) AS target, toFloat(co.weight) AS weight
                 """
 
                 async with self.driver.session() as session:
@@ -679,6 +891,14 @@ class FoundryNeo4jService:
                score: sb.score,
                rank: sb.rank
              }) AS evidence
+        OPTIONAL MATCH (cl)-[cb:CONTRADICTED_BY]->(cf:Fragment)
+        WITH cl, categories, evidence,
+             collect(DISTINCT {
+               fragment_id: cf.id,
+               text: cf.text_snippet,
+               score: cb.score,
+               rank: cb.rank
+             }) AS counter_evidence
         RETURN
           cl.id AS claim_id,
           cl.claim_type AS claim_type,
@@ -686,7 +906,8 @@ class FoundryNeo4jService:
           cl.`order` AS ord,
           cl.text AS text,
           categories,
-          evidence
+          evidence,
+          counter_evidence
         ORDER BY
           CASE cl.section
             WHEN 'conditions' THEN 1
@@ -745,6 +966,22 @@ class FoundryNeo4jService:
                     }
                 )
 
+            counter_evidence = []
+            for ev in (row.get("counter_evidence") or []):
+                if not isinstance(ev, dict):
+                    continue
+                fragment_id = str(ev.get("fragment_id") or "").strip()
+                if not fragment_id:
+                    continue
+                counter_evidence.append(
+                    {
+                        "fragment_id": fragment_id,
+                        "text": str(ev.get("text") or ""),
+                        "score": ev.get("score"),
+                        "rank": ev.get("rank"),
+                    }
+                )
+
             normalized.append(
                 {
                     "claim_id": str(row.get("claim_id") or ""),
@@ -754,6 +991,7 @@ class FoundryNeo4jService:
                     "text": str(row.get("text") or ""),
                     "categories": categories,
                     "evidence": evidence,
+                    "counter_evidence": counter_evidence,
                 }
             )
         return {"total": total, "claims": normalized}
@@ -794,3 +1032,4 @@ class FoundryNeo4jService:
             raise
 
 neo4j_service = FoundryNeo4jService()
+

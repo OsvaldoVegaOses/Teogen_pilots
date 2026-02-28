@@ -12,6 +12,8 @@ ALLOWED_DOMAIN_TEMPLATES = {
     "ngo",
     "government",
     "market_research",
+    "b2c",
+    "consulting",
 }
 
 

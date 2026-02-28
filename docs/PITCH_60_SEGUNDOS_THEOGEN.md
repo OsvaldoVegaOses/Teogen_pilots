@@ -1,37 +1,53 @@
-# Pitch 60 segundos — TheoGen
+﻿# Pitch 60 segundos - TheoGen
 
-## Versión oral (60s)
+## Version oral (60s)
 
-TheoGen es una plataforma corporativa de insights cualitativos que convierte entrevistas y evidencia de campo en decisiones trazables.  
-Hoy, muchas organizaciones tienen información valiosa en texto, pero sin estructura para decidir rápido y con confianza.
+TheoGen convierte entrevistas y evidencia cualitativa en decisiones trazables para equipos directivos.
+Hoy el problema no es falta de informacion: es exceso de texto sin estructura para decidir rapido y con respaldo.
 
-TheoGen resuelve eso combinando dos núcleos:
-- un núcleo lógico en Neo4j, que organiza conceptos, relaciones y claims auditables,
-- y un núcleo semántico en Qdrant, que recupera evidencia focalizada y relevante.
+La plataforma combina dos motores:
+1. Motor logico (Neo4j): organiza categorias, relaciones y claims auditables.
+2. Motor semantico (Qdrant): recupera evidencia exacta para cada conclusion.
 
-El resultado no es solo “un resumen bonito”: cada conclusión queda conectada con su evidencia, se valida con reglas deterministas y se puede auditar en la UI con “Ver evidencia”.
+La diferencia clave: no entregamos solo resumenes.
+Cada afirmacion debe mostrar su evidencia, su nivel de confianza y sus brechas.
+Eso reduce el riesgo de decisiones basadas en interpretaciones debiles.
 
-¿Impacto de negocio?  
-Menos tiempo de análisis, más calidad en el insight, menor riesgo de decisiones basadas en interpretaciones débiles y mejor alineación entre equipos.
+Impacto esperado:
+1. Menor tiempo de analisis.
+2. Mayor calidad del insight.
+3. Mejor alineacion entre investigacion, negocio y direccion.
 
-En una frase: TheoGen transforma investigación cualitativa en una capacidad corporativa de decisión basada en evidencia.
+En una frase:
+TheoGen transforma investigacion cualitativa en decisiones ejecutivas basadas en evidencia verificable.
 
-## Versión slide (1 lámina)
+## Version slide (1 lamina)
 
 ### TheoGen
-**Plataforma corporativa de insights cualitativos trazables**
+**Insights cualitativos trazables para decisiones ejecutivas**
 
 **Problema**
-- Entrevistas y hallazgos dispersos
-- Decisiones lentas y difíciles de justificar
+1. Entrevistas y hallazgos dispersos.
+2. Decisiones lentas y dificiles de justificar.
 
-**Solución**
-- Núcleo lógico (Neo4j): claims auditables y explicables
-- Núcleo semántico (Qdrant): evidencia relevante y focalizada
-- Validación determinista: menos deriva, más rigor
+**Solucion**
+1. Motor logico (Neo4j): claims explicables y auditables.
+2. Motor semantico (Qdrant): evidencia focalizada por claim.
+3. Reglas de validacion: menos deriva, mas rigor.
 
 **Resultado**
-- Velocidad + calidad + trazabilidad para decidir
+1. Velocidad + calidad + trazabilidad para decidir.
 
-**Ideal para**
-- Estrategia, UX Research, asuntos públicos, sostenibilidad, compliance y consultoría
+**Mercados objetivo**
+1. Estrategia corporativa.
+2. UX Research y experiencia cliente.
+3. Asuntos publicos, sostenibilidad, compliance y consultoria.
+
+## Promesa comercial (lo que si prometemos hoy)
+1. Trazabilidad de claims y evidencia en un flujo auditable.
+2. Deteccion explicita de brechas metodologicas.
+3. Reportes ejecutivos con semaforo de confianza.
+
+## Limite explicito (lo que no prometemos sin validacion)
+1. No prometemos causalidad fuerte sin evidencia suficiente.
+2. No prometemos impacto economico sin KPI y baseline acordados.
