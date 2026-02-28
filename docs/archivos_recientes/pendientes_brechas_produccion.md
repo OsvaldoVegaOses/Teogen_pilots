@@ -3,6 +3,11 @@
 Fecha de actualizacion: 2026-02-27  
 Estado general: `NO-GO` (pendientes criticos y altos abiertos)
 
+**Resumen de avance:**
+- Todos los P1 de hardening no dependientes de variables/configuración han sido implementados y están en main (CORS, Docker USER/HEALTHCHECK, probes, limpieza scripts, localhost fallback).
+- Solo quedan pendientes P1 que requieren cambios en autenticación (cookies/BFF), Key Vault y pinning de dependencias.
+- Los bloqueos principales siguen siendo C-04 (alineación de configuración/secrets) y RBAC multi-tenant.
+
 ## 1) Estado por brecha critica
 
 ### C-01 Exposicion de datos ops del asistente
@@ -44,14 +49,14 @@ Observacion operativa:
 
 ## P1 (Alto)
 
-1. Endurecer CORS por ambiente (quitar regex abierto en prod).
-2. Migrar autenticacion fuera de `localStorage` (cookies `HttpOnly`/BFF).
-3. Eliminar fallback `localhost` en frontend productivo.
-4. Restringir red de Key Vault (`publicNetworkAccess`).
-5. Eliminar hardcodes de scripts de despliegue.
-6. Agregar `USER` no-root y `HEALTHCHECK` en imagen backend.
-7. Declarar probes de Container Apps (startup/readiness/liveness).
-8. Pinning estricto de dependencias backend.
+1. Endurecer CORS por ambiente (quitar regex abierto en prod). **COMPLETADO**
+2. Migrar autenticacion fuera de `localStorage` (cookies `HttpOnly`/BFF). **PENDIENTE**
+3. Eliminar fallback `localhost` en frontend productivo. **COMPLETADO**
+4. Restringir red de Key Vault (`publicNetworkAccess`). **PENDIENTE**
+5. Eliminar hardcodes de scripts de despliegue. **COMPLETADO**
+6. Agregar `USER` no-root y `HEALTHCHECK` en imagen backend. **COMPLETADO**
+7. Declarar probes de Container Apps (startup/readiness/liveness). **COMPLETADO**
+8. Pinning estricto de dependencias backend. **PENDIENTE**
 
 ## P2 (Medio)
 
