@@ -59,6 +59,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(ProjectBase):
     id: UUID
+    tenant_id: Optional[str] = None
     owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

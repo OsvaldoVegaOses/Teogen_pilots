@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models.models import Memo, Project
 from ..schemas.memo import MemoCreate, MemoResponse, MemoUpdate
 from ..core.auth import CurrentUser, get_current_user
+from .dependencies import project_scope_condition
 
 router = APIRouter(prefix="/memos", tags=["Memos"])
 
@@ -22,7 +23,7 @@ async def create_memo(
     result = await db.execute(
         select(Project).where(
             Project.id == memo.project_id,
-            Project.owner_id == user.user_uuid
+            project_scope_condition(user),
         )
     )
     if not result.scalar_one_or_none():
@@ -44,7 +45,7 @@ async def list_memos(
     project_result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.owner_id == user.user_uuid
+            project_scope_condition(user),
         )
     )
     if not project_result.scalar_one_or_none():
@@ -66,7 +67,7 @@ async def update_memo(
         .join(Project, Memo.project_id == Project.id)
         .where(
             Memo.id == memo_id,
-            Project.owner_id == user.user_uuid
+            project_scope_condition(user),
         )
     )
     db_memo = result.scalar_one_or_none()

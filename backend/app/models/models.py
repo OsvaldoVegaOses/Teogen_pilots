@@ -21,6 +21,7 @@ code_fragment_links = Table(
 class Project(Base):
     __tablename__ = "projects"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(128), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     methodological_profile = Column(String(50))  # 'straussian', 'constructivist', 'glaserian'

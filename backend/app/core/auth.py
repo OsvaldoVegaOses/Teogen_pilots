@@ -181,6 +181,18 @@ class CurrentUser(BaseModel):
         current = {role.strip().lower() for role in self.roles if role and role.strip()}
         return bool(current.intersection(expected))
 
+    @property
+    def effective_tenant_id(self) -> str:
+        """
+        Stable tenant scope used by RBAC enforcement.
+        - Uses token `tid` when present.
+        - Falls back to a synthetic per-user tenant for providers without tenant claim.
+        """
+        tenant = str(self.tenant_id or "").strip()
+        if tenant:
+            return tenant
+        return f"user:{self.user_uuid}"
+
 
 # ──────────────────────────────────────────────
 # FastAPI Dependencies

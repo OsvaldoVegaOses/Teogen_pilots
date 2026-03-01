@@ -18,7 +18,10 @@ function parseJwtPayload(token: string): Record<string, unknown> | null {
         if (!payloadBase64) return null;
         const normalized = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
         const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, "=");
-        return JSON.parse(atob(padded)) as Record<string, unknown>;
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        const utf8 = new TextDecoder("utf-8").decode(bytes);
+        return JSON.parse(utf8) as Record<string, unknown>;
     } catch {
         return null;
     }

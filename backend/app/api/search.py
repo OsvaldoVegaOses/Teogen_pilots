@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ..services.qdrant_service import qdrant_service
 from ..services.azure_openai import foundry_openai
 from ..core.auth import CurrentUser, get_current_user
+from .dependencies import project_scope_condition
 from ..database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.models import Project, Fragment, Interview
@@ -59,7 +60,7 @@ async def search_fragments(
     project_result = await db.execute(
         select(Project).where(
             Project.id == request.project_filter,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     if not project_result.scalar_one_or_none():
@@ -107,7 +108,7 @@ async def lookup_fragments(
     project_result = await db.execute(
         select(Project).where(
             Project.id == request.project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     if not project_result.scalar_one_or_none():

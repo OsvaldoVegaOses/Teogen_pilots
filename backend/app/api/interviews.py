@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 from ..database import get_db, get_session_local
 from ..schemas.interview import (
     InterviewResponse,
+    InterviewListItemResponse,
     InterviewTranscriptResponse,
     TranscriptInterviewResponse,
     TranscriptPaginationResponse,
@@ -29,7 +30,9 @@ from ..services.transcription_service import transcription_service
 from ..services.interview_export_service import interview_export_service
 from ..core.settings import settings
 from ..core.auth import CurrentUser, get_current_user
+from .dependencies import verify_project_access, project_scope_condition
 from sqlalchemy import select, func
+from sqlalchemy.orm import load_only
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
@@ -156,16 +159,7 @@ async def _set_export_task_state(
 
 
 async def _verify_project_ownership(project_id: UUID, user: CurrentUser, db: AsyncSession) -> Project:
-    project_result = await db.execute(
-        select(Project).where(
-            Project.id == project_id,
-            Project.owner_id == user.user_uuid,
-        )
-    )
-    project = project_result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await verify_project_access(project_id=project_id, user=user, db=db)
 
 
 def _ms_range(start_ms: Optional[int], end_ms: Optional[int]) -> str:
@@ -312,7 +306,7 @@ async def _build_export_payload(
 
 async def _run_interview_export_task(
     task_id: str,
-    owner_id: UUID,
+    project_owner_id: UUID,
     project_id: UUID,
     request: InterviewExportRequest,
 ) -> None:
@@ -322,7 +316,7 @@ async def _run_interview_export_task(
     try:
         async with session_local() as db:
             project_result = await db.execute(
-                select(Project).where(Project.id == project_id, Project.owner_id == owner_id)
+                select(Project).where(Project.id == project_id, Project.owner_id == project_owner_id)
             )
             project = project_result.scalar_one_or_none()
             if not project:
@@ -440,14 +434,7 @@ async def upload_interview(
     """
     
     # 1. Security: Validate Project Ownership
-    project_result = await db.execute(
-        select(Project).where(
-            Project.id == project_id,
-            Project.owner_id == user.user_uuid,
-        )
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
+    await verify_project_access(project_id=project_id, user=user, db=db)
 
     # 2. Security: Validate File Type
     if file.content_type not in ALLOWED_MIME_TYPES:
@@ -616,17 +603,23 @@ async def _list_interviews_impl(
     db: AsyncSession,
 ):
     # Verify ownership before listing
-    project_result = await db.execute(
-        select(Project).where(
-            Project.id == project_id,
-            Project.owner_id == user.user_uuid,
-        )
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
+    await verify_project_access(project_id=project_id, user=user, db=db)
 
     result = await db.execute(
         select(Interview)
+        .options(
+            load_only(
+                Interview.id,
+                Interview.project_id,
+                Interview.participant_pseudonym,
+                Interview.transcription_status,
+                Interview.transcription_method,
+                Interview.word_count,
+                Interview.language,
+                Interview.created_at,
+                Interview.audio_blob_url,
+            )
+        )
         .filter(Interview.project_id == project_id)
         .order_by(Interview.created_at.desc())
     )
@@ -655,7 +648,7 @@ async def _list_interviews_impl(
     return interviews
 
 
-@router.get("/project/{project_id}", response_model=List[InterviewResponse])
+@router.get("/project/{project_id}", response_model=List[InterviewListItemResponse])
 async def list_interviews(
     project_id: UUID,
     user: CurrentUser = Depends(get_current_user),
@@ -678,7 +671,7 @@ async def get_interview_transcript(
     interview_result = await db.execute(
         select(Interview, Project)
         .join(Project, Interview.project_id == Project.id)
-        .where(Interview.id == interview_id, Project.owner_id == user.user_uuid)
+        .where(Interview.id == interview_id, project_scope_condition(user))
     )
     row = interview_result.first()
     if not row:
@@ -746,7 +739,7 @@ async def create_interview_export(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _ = await _verify_project_ownership(request.project_id, user, db)
+    project = await _verify_project_ownership(request.project_id, user, db)
 
     if request.scope == "selected" and not request.interview_ids:
         raise HTTPException(status_code=422, detail="interview_ids is required when scope=selected")
@@ -758,7 +751,7 @@ async def create_interview_export(
     bg_task = asyncio.create_task(
         _run_interview_export_task(
             task_id=task_id,
-            owner_id=user.user_uuid,
+            project_owner_id=(project.owner_id or user.user_uuid),
             project_id=request.project_id,
             request=request,
         )
@@ -810,7 +803,7 @@ async def get_interview_export_download(
 
 
 # Backward-compatible route kept at the end to avoid shadowing /export paths.
-@router.get("/{project_id}", response_model=List[InterviewResponse], include_in_schema=False)
+@router.get("/{project_id}", response_model=List[InterviewListItemResponse], include_in_schema=False)
 async def list_interviews_legacy_path(
     project_id: UUID,
     user: CurrentUser = Depends(get_current_user),

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import CurrentUser, get_current_user
 from ..database import get_db
+from .dependencies import project_scope_condition, resolve_project_tenant_id
 from ..models.models import Project
 from ..schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 
@@ -29,6 +30,7 @@ async def create_project(
             )
 
     new_project = Project(
+        tenant_id=resolve_project_tenant_id(user),
         name=project_in.name,
         description=project_in.description,
         methodological_profile=project_in.methodological_profile,
@@ -59,7 +61,7 @@ async def list_projects(
 ):
     result = await db.execute(
         select(Project)
-        .where(Project.owner_id == user.user_uuid)
+        .where(project_scope_condition(user))
         .order_by(Project.created_at.desc())
     )
     return result.scalars().all()
@@ -74,7 +76,7 @@ async def get_project(
     result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     project = result.scalar_one_or_none()
@@ -93,7 +95,7 @@ async def update_project(
     result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     project = result.scalar_one_or_none()
@@ -121,7 +123,7 @@ async def delete_project(
     result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     project = result.scalar_one_or_none()

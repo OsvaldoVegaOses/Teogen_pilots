@@ -17,6 +17,7 @@ from ..schemas.code import (
     CodeEvidenceFragment,
 )
 from ..core.auth import CurrentUser, get_current_user
+from .dependencies import project_scope_condition
 
 router = APIRouter(prefix="/codes", tags=["Codes"])
 
@@ -30,7 +31,7 @@ async def list_codes(
     project_result = await db.execute(
         select(Project).where(
             Project.id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     if not project_result.scalar_one_or_none():
@@ -54,7 +55,7 @@ async def trigger_auto_coding(
         .join(Project, Interview.project_id == Project.id)
         .where(
             Interview.id == interview_id,
-            Project.owner_id == user.user_uuid
+            project_scope_condition(user),
         )
     )
     
@@ -86,7 +87,7 @@ async def get_code_fragments(
         .join(Project, Code.project_id == Project.id)
         .where(
             Code.id == code_id,
-            Project.owner_id == user.user_uuid
+            project_scope_condition(user),
         )
     )
     if not code_result.scalar_one_or_none():
@@ -116,7 +117,7 @@ async def get_code_evidence(
     code_result = await db.execute(
         select(Code)
         .join(Project, Code.project_id == Project.id)
-        .where(Code.id == code_id, Project.owner_id == user.user_uuid)
+        .where(Code.id == code_id, project_scope_condition(user))
     )
     code = code_result.scalar_one_or_none()
     if not code:
@@ -136,7 +137,7 @@ async def get_code_evidence(
         .join(Interview, Fragment.interview_id == Interview.id)
         .join(Project, Interview.project_id == Project.id)
     )
-    owner_filter = Project.owner_id == user.user_uuid
+    owner_filter = project_scope_condition(user)
     composed_where = and_(*where_clauses, owner_filter)
 
     total_q = select(func.count()).select_from(base_from).where(composed_where)

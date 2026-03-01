@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import InterviewModal from "@/components/InterviewModal";
 
@@ -12,7 +12,6 @@ export interface Theory {
     gaps: unknown[];
     validation?: Record<string, unknown>;
 }
-
 interface TheoryViewerProps {
     projectId: string;
     theory: Theory;
@@ -539,14 +538,14 @@ export default function TheoryViewer({
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Cobertura de evidencia</div>
                                 <div className="text-zinc-700 dark:text-zinc-300">
-                                    Proposiciones con evidencia: {evidenceCoverage.propsWithEvidence}/{evidenceCoverage.propsTotal} Â· Consecuencias con evidencia: {evidenceCoverage.consWithEvidence}/{evidenceCoverage.consTotal}
+                                    Proposiciones con evidencia: {evidenceCoverage.propsWithEvidence}/{evidenceCoverage.propsTotal} · Consecuencias con evidencia: {evidenceCoverage.consWithEvidence}/{evidenceCoverage.consTotal}
                                 </div>
                             </div>
 
                             <div className="rounded-xl border border-zinc-100 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900/30">
                                 <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest mb-2">Grafo (Neo4j)</div>
                                 <div className="text-zinc-700 dark:text-zinc-300">
-                                    Categorias: {Number(counts.category_count ?? 0)} Â· Codigos: {Number(counts.code_count ?? 0)} Â· Fragmentos: {Number(counts.fragment_count ?? 0)}
+                                    Categorias: {Number(counts.category_count ?? 0)} · Codigos: {Number(counts.code_count ?? 0)} · Fragmentos: {Number(counts.fragment_count ?? 0)}
                                 </div>
                                 {centrality.length > 0 && (
                                     <div className="mt-3 overflow-auto">
@@ -622,7 +621,7 @@ export default function TheoryViewer({
                                                         return (
                                                         <div key={j} className="text-xs text-zinc-700 dark:text-zinc-300">
                                                             <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                                                                fragment_id: {toDisplayText(f.fragment_id || f.id)} Â· score: {toDisplayText(f.score ?? "")}
+                                                                fragment_id: {toDisplayText(f.fragment_id || f.id)} · score: {toDisplayText(f.score ?? "")}
                                                             </div>
                                                             <div className="whitespace-pre-wrap break-words">{toDisplayText(f.text)}</div>
                                                             {Boolean(f.fragment_id || f.id) && (
@@ -650,7 +649,7 @@ export default function TheoryViewer({
                                     <div>
                                         <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-widest">Ver evidencia por claim</div>
                                         <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                                            Fuente: {claimsData?.source || "cargando"} Â· Total: {claimsTotal}
+                                            Fuente: {claimsData?.source || "cargando"} · Total: {claimsTotal}
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
@@ -811,4 +810,5 @@ export default function TheoryViewer({
         </div>
     );
 }
+
 

@@ -110,6 +110,8 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = ""
     THEORY_USE_CELERY: bool = False
     ASSISTANT_TENANT_ADMIN_ROLES: str = "admin,ops,tenant_admin,platform_super_admin"
+    PLATFORM_SUPER_ADMIN_ROLES: str = "platform_super_admin"
+    TENANT_ADMIN_ROLES: str = "tenant_admin,admin,ops"
 
     # External managed services
     NEO4J_URI: str

@@ -33,6 +33,7 @@ from ..services.export.privacy import detect_pii_types, redact_pii_text
 from ..services.export_service import export_service
 from ..services.neo4j_service import neo4j_service
 from ..services.storage_service import storage_service
+from .dependencies import project_scope_condition, verify_project_access
 
 logger = logging.getLogger(__name__)
 
@@ -797,12 +798,8 @@ async def generate_theory(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
-    )
-    project = project_result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await verify_project_access(project_id=project_id, user=user, db=db)
+    pipeline_owner_uuid = project.owner_id or user.user_uuid
 
     task_id = str(uuid.uuid4())
     existing_task_id = await _acquire_project_lock(project_id, task_id)
@@ -847,7 +844,7 @@ async def generate_theory(
             celery_task = run_theory_pipeline_task.delay(
                 task_id=task_id,
                 project_id=str(project_id),
-                user_uuid=str(user.user_uuid),
+                user_uuid=str(pipeline_owner_uuid),
                 request_payload=request.model_dump(),
             )
             _theory_tasks[task_id]["worker_task_id"] = celery_task.id
@@ -859,7 +856,7 @@ async def generate_theory(
                 celery_task.id,
             )
         else:
-            bg_task = asyncio.create_task(_run_theory_pipeline(task_id, project_id, user.user_uuid, request))
+            bg_task = asyncio.create_task(_run_theory_pipeline(task_id, project_id, pipeline_owner_uuid, request))
             _background_tasks.add(bg_task)
             _background_tasks_by_id[task_id] = bg_task
             bg_task.add_done_callback(_background_tasks.discard)
@@ -995,11 +992,7 @@ async def list_theories(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
+    await verify_project_access(project_id=project_id, user=user, db=db)
 
     result = await db.execute(
         select(Theory)
@@ -1018,11 +1011,7 @@ async def get_theory_judge_rollout(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
+    await verify_project_access(project_id=project_id, user=user, db=db)
 
     policy = await theory_pipeline.get_judge_rollout_policy(project_id=project_id, db=db)
 
@@ -1082,11 +1071,7 @@ async def get_theory_pipeline_slo(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.owner_id == user.user_uuid)
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Project not found")
+    await verify_project_access(project_id=project_id, user=user, db=db)
 
     rows = (
         await db.execute(
@@ -1382,13 +1367,13 @@ async def explain_theory_claims(
         .where(
             Theory.id == theory_id,
             Theory.project_id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     row = result.first()
     if not row:
         raise HTTPException(status_code=404, detail="Theory or Project not found")
-    theory, _project = row
+    theory, project = row
 
     source = "validation_fallback"
     all_claims = _build_claims_from_validation_fallback(theory)
@@ -1403,7 +1388,7 @@ async def explain_theory_claims(
         neo_claims = await neo4j_service.get_theory_claims_explain(
             project_id=project_id,
             theory_id=theory_id,
-            owner_id=user.user_uuid,
+            owner_id=(project.owner_id or user.user_uuid),
             limit=limit,
             offset=offset,
             section=section,
@@ -1518,7 +1503,7 @@ async def get_export_readiness(
         .where(
             Theory.id == theory_id,
             Theory.project_id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     row = result.first()
@@ -1551,7 +1536,7 @@ async def export_theory_report(
         .where(
             Theory.id == theory_id,
             Theory.project_id == project_id,
-            Project.owner_id == user.user_uuid,
+            project_scope_condition(user),
         )
     )
     row = result.first()

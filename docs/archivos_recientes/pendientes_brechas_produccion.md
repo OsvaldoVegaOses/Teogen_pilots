@@ -12,13 +12,15 @@ Estado general: `NO-GO` (pendientes criticos y altos abiertos)
 
 ### C-01 Exposicion de datos ops del asistente
 
-Estado: `Mitigada, pendiente cierre estructural`  
+Estado: `En progreso (RBAC fase 1 aplicada), pendiente cierre estructural`  
 Avance ya implementado:
 
 - Scoping por `user_id` para usuarios normales.
 - Scoping por `tenant_id` para tenant-admin.
 - `/assistant/authenticated/ops` devuelve `403` para no-admin.
 - `profile/me` expone `can_view_assistant_ops` y el dashboard oculta el panel ops a no autorizados.
+- Baseline RBAC multi-tenant en endpoints de negocio con `project_scope_condition` (platform_super_admin / tenant_admin / owner).
+- `projects.tenant_id` con migracion de backfill para aislamiento por tenant en capa de proyecto.
 
 Pendiente para cierre total:
 

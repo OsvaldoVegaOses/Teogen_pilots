@@ -1114,19 +1114,46 @@ class TheoryPipeline:
                 n_total = len(completed_interviews)
                 n_done = 0
                 failures: list[str] = []
+                heartbeat_seconds = 8
+                timeout_per_interview = max(
+                    60,
+                    int(settings.THEORY_AUTOCODE_INTERVIEW_TIMEOUT_SECONDS),
+                )
 
-                tasks = [asyncio.create_task(_code_interview(iv.id)) for iv in completed_interviews]
-                for fut in asyncio.as_completed(tasks):
-                    try:
-                        await fut
-                    except Exception as e:
-                        failures.append(str(e)[:300])
-                    finally:
-                        n_done += 1
+                pending: set[asyncio.Task[None]] = {
+                    asyncio.create_task(_code_interview(iv.id)) for iv in completed_interviews
+                }
+                while pending:
+                    done, pending = await asyncio.wait(
+                        pending,
+                        timeout=heartbeat_seconds,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if done:
+                        for fut in done:
+                            try:
+                                await fut
+                            except Exception as e:
+                                failures.append(str(e)[:300])
+                            finally:
+                                n_done += 1
                         # Keep UI moving inside the long auto-code stage (25% -> 40%).
                         stage_pct = 25 + int((15 * n_done) / max(1, n_total))
                         await mark_step("auto_code", stage_pct)
                         await refresh_lock()
+                        continue
+
+                    # Heartbeat for long-running interviews so UI doesn't look frozen at 25%.
+                    elapsed = perf_counter() - started
+                    heartbeat_cap = 39
+                    heartbeat_window = heartbeat_cap - 25
+                    expected_window_seconds = max(120.0, float(timeout_per_interview))
+                    heartbeat_pct = 25 + min(
+                        heartbeat_window,
+                        int((heartbeat_window * elapsed) / expected_window_seconds),
+                    )
+                    await mark_step("auto_code", max(25, min(heartbeat_cap, heartbeat_pct)))
+                    await refresh_lock()
 
                 if failures:
                     # Best-effort: auto-coding can partially succeed; pipeline will still

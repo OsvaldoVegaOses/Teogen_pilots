@@ -26,6 +26,20 @@ class InterviewResponse(InterviewBase):
         from_attributes = True
 
 
+class InterviewListItemResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    participant_pseudonym: Optional[str] = None
+    transcription_status: str
+    transcription_method: Optional[str] = None
+    word_count: Optional[int] = None
+    language: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class TranscriptSegmentResponse(BaseModel):
     fragment_id: UUID
     paragraph_index: Optional[int] = None
